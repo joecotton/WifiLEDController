@@ -8,25 +8,10 @@ extern "C"
 #include <user_interface.h>
 }
 
-enum command_type_t : uint8_t {WLEDC_CMD_NULL, WLEDC_CMD_OFF, WLEDC_CMD_GETSTATUS, WLEDC_CMD_SETSTATUS, WLEDC_CMD_STATUS};
-
-struct __attribute__((packed)) status_t
-{
-  uint8_t active;
-  uint16_t program;
-  uint16_t speed;
-  uint16_t refresh_period_ms;
-  uint32_t timestamp;
-};
-
-struct __attribute__((packed)) command_t
-{
-  command_type_t cmd;
-  status_t stat;
-};
+#include "../../common/wifiledcontroller.h"
 
 status_t statusLocal;
-// status_t statusBuffer;
+status_t statusRemote;
 command_t commandBufferOut;
 command_t commandBufferIn;
 
@@ -52,15 +37,29 @@ void InitESPNow();
 void requestStatus();
 void flickLED();
 void toggleActiveAndSend();
+
+void handleCommand();
+void handlePong();
+
 void sendStatus();
+void sendCommand(command_type_t command);
+void sendPing();
+
+void watchdogReset();
+void watchdogExpire();
 
 bool retry = true;
 
 uint8_t pendingStatus = 0;
+uint8_t pendingCommand = 0;
+uint8_t isConnected = 0;
+uint8_t pendingPongIn = 0;
 
 Ticker reqStatusTicker;
 Ticker ledTicker;
 Ticker toggleActiveTicker;
+Ticker watchdogTicker;
+Ticker pingTicker;
 
 void setup()
 {
@@ -89,27 +88,38 @@ void setup()
     // digitalWrite(STATUS_LED, LOW);
   }
 
-  reqStatusTicker.attach_ms(2000, requestStatus);
-  toggleActiveTicker.attach_ms(876, toggleActiveAndSend);
+  // reqStatusTicker.attach_ms(2000, requestStatus);
+  // toggleActiveTicker.attach_ms(876, toggleActiveAndSend);
+  pingTicker.attach_ms_scheduled(1000, sendPing);
 }
 
 void loop()
 {
-  if (pendingStatus) {
-    Serial.println("Incoming status:");
-    memcpy(&statusLocal, &(commandBufferIn.stat), sizeof(statusLocal));
-    Serial.print("  active: ");
-    Serial.println(statusLocal.active);
-    Serial.print("  program: ");
-    Serial.println(statusLocal.program);
-    Serial.print("  speed: ");
-    Serial.println(statusLocal.speed);
-    Serial.print("  refresh_period_ms: ");
-    Serial.println(statusLocal.refresh_period_ms);
-    Serial.print("  timestamp: ");
-    Serial.println(statusLocal.timestamp);
-    pendingStatus = 0;
+  handleCommand();
+  handlePong();
+
+  // if (pendingStatus) {
+  //   Serial.println("Incoming status:");
+  //   memcpy(&statusLocal, &(commandBufferIn.stat), sizeof(statusLocal));
+  //   Serial.print("  active: ");
+  //   Serial.println(statusLocal.active);
+  //   Serial.print("  program: ");
+  //   Serial.println(statusLocal.program);
+  //   Serial.print("  speed: ");
+  //   Serial.println(statusLocal.speed);
+  //   Serial.print("  refresh_period_ms: ");
+  //   Serial.println(statusLocal.refresh_period_ms);
+  //   Serial.print("  timestamp: ");
+  //   Serial.println(statusLocal.timestamp);
+  //   pendingStatus = 0;
+  // }
+
+  if (isConnected) {
+    digitalWrite(STATUS_LED, HIGH);
+  } else {
+    digitalWrite(STATUS_LED, LOW);
   }
+
 }
 
 void printMacAddress(uint8_t* macaddr) {
@@ -147,33 +157,34 @@ void InitESPNow() {
 
 void onDataSent(uint8_t* macaddr, uint8_t status) {
   digitalWrite(LED_BUILTIN, LOW);
-  ledTicker.attach_ms(80, flickLED);
-  Serial.println("Data sent successfully");
+  ledTicker.once_ms_scheduled(80, flickLED);
+  // Serial.println("Data sent successfully");
 }
 
 void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
   // The only data we will actually be receiving is a command packet with the remote's status
   // Only act if that's the case
-  Serial.println("Command Received");
-  if (len == sizeof(commandBufferIn)) {
-    memcpy(&commandBufferIn, data, sizeof(commandBufferIn));
-    if (commandBufferIn.cmd == WLEDC_CMD_STATUS) {
-      pendingStatus = 1;
+  // Serial.println("Command Received");
+  if (!pendingCommand) {
+    if (len == sizeof(commandBufferIn)) {
+      memcpy(&commandBufferIn, data, sizeof(commandBufferIn));
     }
+    pendingCommand = 1;
   }
+
   digitalWrite(LED_BUILTIN, LOW);
-  ledTicker.attach_ms(8, flickLED);
+  ledTicker.once_ms_scheduled(8, flickLED);
 }
 
 void requestStatus() {
-  Serial.println("Requesting Status");
+  // Serial.println("Requesting Status");
   commandBufferOut.cmd=WLEDC_CMD_GETSTATUS;
   memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
-  int result = esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
+  esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
 }
 
 void flickLED() {
-  ledTicker.detach();
+  // ledTicker.detach();
   digitalWrite(LED_BUILTIN, HIGH);
 }
 
@@ -183,8 +194,77 @@ void toggleActiveAndSend() {
 }
 
 void sendStatus() {
-  Serial.println("Sending Status");
-  commandBufferOut.cmd=WLEDC_CMD_SETSTATUS;
+  // Serial.println("Sending Status");
+  sendCommand(WLEDC_CMD_SETSTATUS);
+}
+
+void sendCommand(command_type_t command) {
+  // Serial.println("Sending requested Status");
+  commandBufferOut.cmd=command;
   memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
-  int result = esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
+  esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
+}
+
+void sendPing() {
+  sendCommand(WLEDC_CMD_PING);
+  // Serial.println("Sending Ping");
+  // pendingPongIn = 1;
+}
+
+void handlePong() {
+  if (pendingPongIn) {
+    pendingPongIn = 0;
+    // Reset watchdog timer
+    watchdogReset();
+    // Serial.println("Got Pong");
+  }
+}
+
+void watchdogExpire() {
+  // Serial.println("Watchdog Expired...");
+  isConnected = 0;
+}
+
+void watchdogReset() {
+  // watchdogTicker.detach();
+  isConnected = 1;
+  watchdogTicker.once_ms_scheduled(1200, watchdogExpire);
+}
+
+void handleCommand() {
+  if (pendingCommand)
+  {
+    switch (commandBufferIn.cmd)
+    {
+    case WLEDC_CMD_NULL:
+      // Null means do nothing
+      // Serial.println("NULL CMD");
+      break;
+    case WLEDC_CMD_OFF:
+      // Serial.println("OFF CMD");
+      break;
+    case WLEDC_CMD_GETSTATUS:
+      // The status has been requested. We should send it.
+      // Serial.println("GETSTATUS CMD");
+      break;
+    case WLEDC_CMD_SETSTATUS:
+      // A new status has been sent. We should update our local copy.
+      // Serial.println("SETSTATUS CMD");
+      break;
+    case WLEDC_CMD_STATUS:
+      break;
+    case WLEDC_CMD_PING:
+      // Server doesn't get PINGed
+      break;
+    case WLEDC_CMD_PONG:
+      // Serial.println("PONG!");
+      pendingPongIn = 1;
+      break;
+    };
+
+    // Copy status that was sent by the client
+    memcpy(&(commandBufferIn.stat), &statusRemote, sizeof(statusRemote));
+
+    pendingCommand = 0;
+  }
 }
