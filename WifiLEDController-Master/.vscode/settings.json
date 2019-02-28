@@ -2,5 +2,6 @@
     "terminal.integrated.env.osx": {
         "PATH": "/Users/lcotton/.platformio/penv/bin:/Users/lcotton/.platformio/penv:/opt/local/bin:/opt/local/sbin:/usr/local/sbin:/usr/local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/lcotton/Library/Python/3.7/bin:/Applications/VMware Fusion.app/Contents/Public:/usr/local/MacGPG2/bin:/opt/X11/bin:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/usr/local/CrossPack-AVR/bin:/Applications/Wireshark.app/Contents/MacOS:/Development/adt-bundle/sdk/platform-tools:/Development/adt-bundle/sdk/tools:/Development/cordova-android/bin",
         "PLATFORMIO_CALLER": "vscode"
-    }
+    },
+    "C_Cpp.intelliSenseEngineFallback": "Disabled"
 }
