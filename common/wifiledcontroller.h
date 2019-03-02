@@ -20,6 +20,7 @@ struct __attribute__((packed)) status_t
   uint8_t active;
   program_t program;
   uint16_t speed;
+  uint16_t width;
   uint16_t refresh_period_ms;
   uint32_t timestamp;
 };

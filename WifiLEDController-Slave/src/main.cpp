@@ -45,6 +45,8 @@ void initVariant()
 #define WSLEDS 100
 #define WSMAXBRIGHT 64
 #define LED_UPDATE_PERIOD 17
+#define DEFAULT_SPEED 24
+#define DEFAULT_WIDTH 1
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -70,13 +72,18 @@ void drawLEDs();
 
 Ticker ledDisplayTicker;
 
+void handleStatus();
 void handleActive();
 void handleSpeed();
 void handleProgram();
-void handleStatus();
+void handleWidth();
+void handleRefresh();
 
 void updateProgram();
 void updateActive();
+void updateSpeed();
+void updateWidth());
+void updateRefresh();
 
 void enablePrgBlack();
 void disablePrgBlack();
@@ -116,12 +123,14 @@ void setup()
   // Initialize status
   statusActive.active            = 0;
   statusActive.program           = WLEDC_PRG_BLACK;
-  statusActive.speed             = 24;
+  statusActive.speed             = DEFAULT_SPEED;
+  statusActive.width             = DEFAULT_WIDTH;
   statusActive.refresh_period_ms = LED_UPDATE_PERIOD;
 
   statusLocal.active            = 1;
   statusLocal.program           = WLEDC_PRG_RAINBOW;
-  statusLocal.speed             = 24;
+  statusLocal.speed             = DEFAULT_SPEED;
+  statusLocal.width             = DEFAULT_WIDTH;
   statusLocal.refresh_period_ms = LED_UPDATE_PERIOD;
   statusLocal.timestamp         = millis();
   pendingStatus = 1;
@@ -297,6 +306,8 @@ void handleStatus() {
     handleActive();
     handleProgram();
     handleSpeed();
+    handleWidth();
+    handleRefresh();
     pendingStatus = 0;
   }
 }
@@ -310,12 +321,30 @@ void handleActive() {
 
 void handleSpeed() {
   Serial.println("Updating Speed");
+  if (statusActive.speed != statusLocal.speed) {
+    statusActive.speed = statusLocal.speed;
+    updateSpeed();
+  }
 }
 
 void handleProgram() {
   if (statusActive.program != statusLocal.program) {
     statusActive.program = statusLocal.program;
     updateProgram();
+  }
+}
+
+void handleWidth() {
+  if (statusActive.width != statusLocal.width) {
+    statusActive.width = statusLocal.width;
+    updateWidth();
+  }
+}
+
+void handleRefresh() {
+  if (statusActive.refresh_period_ms != statusLocal.refresh_period_ms) {
+    statusActive.refresh_period_ms = statusLocal.refresh_period_ms;
+    updateRefresh();
   }
 }
 
@@ -326,7 +355,6 @@ void updateActive() {
     ledDisplayTicker.attach_ms_scheduled(statusActive.refresh_period_ms, drawLEDs);
   } else {
     ledDisplayTicker.detach();
-    Serial.println("BLACK-1");
     leds.fill_solid(CRGB::Black);
     FastLED.show();
   }
@@ -351,6 +379,39 @@ void updateProgram() {
   };
 }
 
+void updateSpeed() {
+  Serial.println("Updating Speed");
+  // Find active program and reset
+  switch (statusActive.program) {
+    case WLEDC_PRG_BLACK:
+      break;
+    case WLEDC_PRG_WHITE50:
+      disablePrgWhite50();
+      enablePrgWhite50();
+      break;
+    case WLEDC_PRG_RAINBOW:
+      disablePrgRainbow();
+      enablePrgRainbow();
+      break;
+    case WLEDC_PRG_TWINKLE:
+      disablePrgTwinkle();
+      enablePrgTwinkle();
+      break;
+  }
+}
+
+void updateWidth() {
+  Serial.println("Updating Width");
+}
+
+void updateRefresh() {
+  Serial.println("Updating Refresh Period");
+  if (ledDisplayTicker.active) {
+    ledDisplayTicker.detach();
+    ledDisplayTicker.attach_ms_scheduled(statusActive.refresh_period_ms, drawLEDs);
+  }
+}
+
 //-------------
 // LED PATTERNS
 //-------------
@@ -363,7 +424,9 @@ void drawLEDs() {
 
 void incrementPallete() {
   static uint8_t currentHue;
-  leds.fill_rainbow(currentHue++, 3);
+  currentHue += statusActive.width;
+  // currentHue += 1;
+  leds.fill_rainbow(currentHue, 3);
 }
 
 // ----- Program Switching -----
@@ -379,7 +442,6 @@ void disablePrgBlack() {
 }
 
 void prgBlackDo() {
-  Serial.println("BLACK-2");
   leds.fill_solid(CRGB::Black);
 }
 
