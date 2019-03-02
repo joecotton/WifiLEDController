@@ -2,6 +2,9 @@
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
 
+#define FASTLED_ALLOW_INTERRUPTS 0
+#include <FastLED.h>
+
 extern "C"
 {
 #include <espnow.h>
@@ -32,6 +35,9 @@ void initVariant()
 
 #define CHANNEL 1
 #define STATUS_LED D1
+#define WSPIN D8
+#define WSLEDS 8
+#define WSMAXBRIGHT 32
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -50,11 +56,38 @@ void handlePing();
 void watchdogReset();
 void watchdogExpire();
 
+void FillLEDsFromPaletteColors(uint8_t colorIndex);
+void incremenPallete();
+
+// ----- Program Switching -----
+void enablePrgBlack();
+void disablePrgBlack();
+void prgBlackDo();
+Ticker prgBlackTicker;
+
+void enablePrgWhite50();
+void disablePrgWhite50();
+
+void enablePrgRainbow();
+void disablePrgRainbow();
+
+void enablePrgTwinkle();
+void disablePrgTwinkle();
+
+void disableAllPrg();
+
 uint8_t pendingPongOut = 0;
 uint8_t isConnected = 0;
 
 Ticker ledTicker;
 Ticker watchdogTicker;
+Ticker rainbowTicker;
+
+CRGBArray<WSLEDS> leds;
+CRGBPalette16 currentPalette;
+TBlendType currentBlending;
+
+uint8_t startIndex = 0;
 
 void setup()
 {
@@ -72,6 +105,12 @@ void setup()
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(STATUS_LED, OUTPUT);
 
+  LEDS.addLeds<WS2812, WSPIN, GRB>(leds, WSLEDS);
+  FastLED.setBrightness(WSMAXBRIGHT);
+
+  currentPalette = RainbowColors_p;
+  currentBlending = LINEARBLEND;
+
   int addStatus = esp_now_add_peer((u8*)remoteMac, ESP_NOW_ROLE_COMBO, CHANNEL, NULL, 0);
   if (addStatus == 0) {
     // Pair success
@@ -82,10 +121,12 @@ void setup()
     // digitalWrite(STATUS_LED, LOW);
   }
 
+  rainbowTicker.attach_ms_scheduled(15, incremenPallete);
 }
 
 void loop()
 {
+
   handleCommand();
   handlePing();
 
@@ -96,6 +137,8 @@ void loop()
   } else {
     digitalWrite(STATUS_LED, LOW);
   }
+
+  FastLED.show();
 }
 
 void InitWifi() {
@@ -143,7 +186,7 @@ void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
 }
 
 void flickLED() {
-  ledTicker.detach();
+  // ledTicker.detach();
   digitalWrite(LED_BUILTIN, HIGH);
 }
 
@@ -218,4 +261,75 @@ void handleCommand() {
     };
     pendingCommand = 0;
   }
+}
+
+//-------------
+// LED PATTERNS
+//-------------
+
+void FillLEDsFromPaletteColors(uint8_t colorIndex)
+{
+  uint8_t brightness = 255;
+
+  for (int i = 0; i < WSLEDS; i++)
+  { 
+    leds[i] = ColorFromPalette(currentPalette, colorIndex, brightness, currentBlending);
+    colorIndex += 24;
+  }
+}
+
+void incremenPallete() {
+  startIndex++; /* motion speed */
+  FillLEDsFromPaletteColors(startIndex);
+}
+
+// ----- Program Switching -----
+// ----- BLACK (Off) -----
+void enablePrgBlack() {
+  prgBlackTicker.attach_ms_scheduled(1000, prgBlackDo);
+}
+
+void disablePrgBlack() {
+  prgBlackTicker.detach();
+}
+
+void prgBlackDo() {
+  leds.fill_solid(CRGB::Black);
+}
+
+// ----- White 50% -----
+void enablePrgWhite50() {
+
+}
+
+void disablePrgWhite50() {
+
+}
+
+// ----- Rainbow -----
+void enablePrgRainbow() {
+
+}
+
+void disablePrgRainbow() {
+
+}
+
+// ----- Twinkly -----
+void enablePrgTwinkle() {
+
+}
+
+void disablePrgTwinkle() {
+
+}
+
+// ----- Disable All -----
+void disableAllPrg() {
+  disablePrgBlack();
+  disablePrgWhite50();
+  disablePrgRainbow();
+  disablePrgTwinkle();
+
+  enablePrgBlack();
 }
