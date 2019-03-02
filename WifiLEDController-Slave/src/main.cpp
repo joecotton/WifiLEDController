@@ -2,7 +2,9 @@
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
 
-#define FASTLED_ALLOW_INTERRUPTS 0
+// #define FASTLED_ALLOW_INTERRUPTS 0
+// #define FASTLED_INTERRUPT_RETRY_COUNT 1
+#define FASTLED_ESP8266_DMA
 #include <FastLED.h>
 
 extern "C"
@@ -37,7 +39,8 @@ void initVariant()
 #define STATUS_LED D1
 #define WSPIN D8
 #define WSLEDS 8
-#define WSMAXBRIGHT 32
+#define WSMAXBRIGHT 16
+#define LED_UPDATE_PERIOD 17
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -56,6 +59,7 @@ void handlePing();
 void watchdogReset();
 void watchdogExpire();
 
+void drawLEDs();
 void FillLEDsFromPaletteColors(uint8_t colorIndex);
 void incremenPallete();
 
@@ -81,6 +85,9 @@ uint8_t isConnected = 0;
 
 Ticker ledTicker;
 Ticker watchdogTicker;
+
+Ticker ledDisplayTicker;
+
 Ticker rainbowTicker;
 
 CRGBArray<WSLEDS> leds;
@@ -121,6 +128,8 @@ void setup()
     // digitalWrite(STATUS_LED, LOW);
   }
 
+  ledDisplayTicker.attach_ms_scheduled(LED_UPDATE_PERIOD, drawLEDs);
+
   rainbowTicker.attach_ms_scheduled(15, incremenPallete);
 }
 
@@ -138,7 +147,7 @@ void loop()
     digitalWrite(STATUS_LED, LOW);
   }
 
-  FastLED.show();
+  // FastLED.show();
 }
 
 void InitWifi() {
@@ -267,6 +276,10 @@ void handleCommand() {
 // LED PATTERNS
 //-------------
 
+void drawLEDs() {
+  FastLED.show();
+}
+
 void FillLEDsFromPaletteColors(uint8_t colorIndex)
 {
   uint8_t brightness = 255;
@@ -274,7 +287,7 @@ void FillLEDsFromPaletteColors(uint8_t colorIndex)
   for (int i = 0; i < WSLEDS; i++)
   { 
     leds[i] = ColorFromPalette(currentPalette, colorIndex, brightness, currentBlending);
-    colorIndex += 24;
+    colorIndex += 12;
   }
 }
 
