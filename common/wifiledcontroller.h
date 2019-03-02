@@ -8,10 +8,17 @@ enum command_type_t : uint8_t {
     WLEDC_CMD_PONG
 };
 
+enum program_t : uint8_t {
+  WLEDC_PRG_BLACK,
+  WLEDC_PRG_WHITE50,
+  WLEDC_PRG_RAINBOW,
+  WLEDC_PRG_TWINKLE
+};
+
 struct __attribute__((packed)) status_t
 {
   uint8_t active;
-  uint16_t program;
+  program_t program;
   uint16_t speed;
   uint16_t refresh_period_ms;
   uint32_t timestamp;

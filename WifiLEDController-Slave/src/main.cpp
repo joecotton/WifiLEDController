@@ -2,7 +2,7 @@
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
 
-// #define FASTLED_ALLOW_INTERRUPTS 0
+#define FASTLED_ALLOW_INTERRUPTS 0
 // #define FASTLED_INTERRUPT_RETRY_COUNT 1
 #define FASTLED_ESP8266_DMA
 #include <FastLED.h>
@@ -16,10 +16,13 @@ extern "C"
 #include <../../common/wifiledcontroller.h>
 
 status_t statusLocal;
+status_t statusActive;
 command_t commandBufferOut;
 command_t commandBufferIn;
 
 uint8_t pendingCommand = 0;
+uint8_t pendingStatus = 0;
+uint8_t pendingTransmission = 0;
 
 /* Set a private Mac Address
  *  http://serverfault.com/questions/40712/what-range-of-mac-addresses-can-i-safely-use-for-my-virtual-machines
@@ -37,9 +40,10 @@ void initVariant()
 
 #define CHANNEL 1
 #define STATUS_LED D1
-#define WSPIN D8
-#define WSLEDS 8
-#define WSMAXBRIGHT 16
+#define WSPIN 3
+// #define WSPIN D8
+#define WSLEDS 100
+#define WSMAXBRIGHT 64
 #define LED_UPDATE_PERIOD 17
 
 void printMacAddress(uint8_t* macaddr);
@@ -60,10 +64,20 @@ void watchdogReset();
 void watchdogExpire();
 
 void drawLEDs();
-void FillLEDsFromPaletteColors(uint8_t colorIndex);
-void incremenPallete();
+// void FillLEDsFromPaletteColors(uint8_t colorIndex);
 
 // ----- Program Switching -----
+
+Ticker ledDisplayTicker;
+
+void handleActive();
+void handleSpeed();
+void handleProgram();
+void handleStatus();
+
+void updateProgram();
+void updateActive();
+
 void enablePrgBlack();
 void disablePrgBlack();
 void prgBlackDo();
@@ -74,6 +88,8 @@ void disablePrgWhite50();
 
 void enablePrgRainbow();
 void disablePrgRainbow();
+void incrementPallete();
+Ticker rainbowTicker;
 
 void enablePrgTwinkle();
 void disablePrgTwinkle();
@@ -86,10 +102,6 @@ uint8_t isConnected = 0;
 Ticker ledTicker;
 Ticker watchdogTicker;
 
-Ticker ledDisplayTicker;
-
-Ticker rainbowTicker;
-
 CRGBArray<WSLEDS> leds;
 CRGBPalette16 currentPalette;
 TBlendType currentBlending;
@@ -100,6 +112,21 @@ void setup()
 {
   Serial.begin(115200);
   Serial.println();
+
+  // Initialize status
+  statusActive.active            = 0;
+  statusActive.program           = WLEDC_PRG_BLACK;
+  statusActive.speed             = 24;
+  statusActive.refresh_period_ms = LED_UPDATE_PERIOD;
+
+  statusLocal.active            = 1;
+  statusLocal.program           = WLEDC_PRG_RAINBOW;
+  statusLocal.speed             = 24;
+  statusLocal.refresh_period_ms = LED_UPDATE_PERIOD;
+  statusLocal.timestamp         = millis();
+  pendingStatus = 1;
+  // Copy local to active.
+  // memcpy(&statusActive, &statusLocal, sizeof(statusLocal));
 
   // initVariant();
   InitWifi();
@@ -128,9 +155,6 @@ void setup()
     // digitalWrite(STATUS_LED, LOW);
   }
 
-  ledDisplayTicker.attach_ms_scheduled(LED_UPDATE_PERIOD, drawLEDs);
-
-  rainbowTicker.attach_ms_scheduled(15, incremenPallete);
 }
 
 void loop()
@@ -138,6 +162,7 @@ void loop()
 
   handleCommand();
   handlePing();
+  handleStatus();
 
   statusLocal.timestamp = millis();
 
@@ -146,8 +171,6 @@ void loop()
   } else {
     digitalWrite(STATUS_LED, LOW);
   }
-
-  // FastLED.show();
 }
 
 void InitWifi() {
@@ -174,9 +197,9 @@ void InitESPNow() {
 }
 
 void onDataSent(uint8_t* macaddr, uint8_t status) {
+  pendingTransmission = 0;
   digitalWrite(LED_BUILTIN, LOW);
   ledTicker.once_ms_scheduled(80, flickLED);
-  // Serial.println("Data sent successfully");
 }
 
 void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
@@ -191,7 +214,6 @@ void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
     digitalWrite(LED_BUILTIN, LOW);
     ledTicker.once_ms_scheduled(8, flickLED);
   }
-  // watchdogReset();
 }
 
 void flickLED() {
@@ -207,6 +229,7 @@ void sendStatus() {
 void sendCommand(command_type_t command) {
   commandBufferOut.cmd=command;
   memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
+  pendingTransmission = 1;
   esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
 }
 
@@ -244,24 +267,21 @@ void handleCommand() {
     case WLEDC_CMD_OFF:
       // Serial.println("OFF CMD");
       statusLocal.active = 0;
+      pendingStatus = 1;
       break;
     case WLEDC_CMD_GETSTATUS:
       // The status has been requested. We should send it.
-      // Serial.println("GETSTATUS CMD");
       sendStatus();
       break;
     case WLEDC_CMD_SETSTATUS:
       // A new status has been sent. We should update our local copy.
-      // Serial.println("SETSTATUS CMD");
       memcpy(&statusLocal, &(commandBufferIn.stat), sizeof(commandBufferIn.stat));
-      // Serial.print("  active: ");
-      // Serial.println(statusLocal.active);
+      pendingStatus = 1;
       break;
     case WLEDC_CMD_STATUS:
       // Not for us to receive
       break;
     case WLEDC_CMD_PING:
-      // Serial.println("PING!");
       pendingPongOut = 1;
       break;
     case WLEDC_CMD_PONG:
@@ -272,77 +292,134 @@ void handleCommand() {
   }
 }
 
+void handleStatus() {
+  if (pendingStatus) {
+    handleActive();
+    handleProgram();
+    handleSpeed();
+    pendingStatus = 0;
+  }
+}
+
+void handleActive() {
+  if (statusActive.active != statusLocal.active) {
+    statusActive.active = statusLocal.active;
+    updateActive();
+  }
+}
+
+void handleSpeed() {
+  Serial.println("Updating Speed");
+}
+
+void handleProgram() {
+  if (statusActive.program != statusLocal.program) {
+    statusActive.program = statusLocal.program;
+    updateProgram();
+  }
+}
+
+void updateActive() {
+  Serial.println("Updating Active");
+  if (statusActive.active) {
+    ledDisplayTicker.detach();
+    ledDisplayTicker.attach_ms_scheduled(statusActive.refresh_period_ms, drawLEDs);
+  } else {
+    ledDisplayTicker.detach();
+    Serial.println("BLACK-1");
+    leds.fill_solid(CRGB::Black);
+    FastLED.show();
+  }
+}
+
+void updateProgram() {
+  Serial.println("Updating Program");
+  disableAllPrg();
+  switch (statusActive.program) {
+    case WLEDC_PRG_BLACK:
+      enablePrgBlack();
+      break;
+    case WLEDC_PRG_WHITE50:
+      enablePrgWhite50();
+      break;
+    case WLEDC_PRG_RAINBOW:
+      enablePrgRainbow();
+      break;
+    case WLEDC_PRG_TWINKLE:
+      enablePrgTwinkle();
+      break;
+  };
+}
+
 //-------------
 // LED PATTERNS
 //-------------
 
 void drawLEDs() {
-  FastLED.show();
-}
-
-void FillLEDsFromPaletteColors(uint8_t colorIndex)
-{
-  uint8_t brightness = 255;
-
-  for (int i = 0; i < WSLEDS; i++)
-  { 
-    leds[i] = ColorFromPalette(currentPalette, colorIndex, brightness, currentBlending);
-    colorIndex += 12;
+  if (!pendingTransmission) {
+    FastLED.show();
   }
 }
 
-void incremenPallete() {
-  startIndex++; /* motion speed */
-  FillLEDsFromPaletteColors(startIndex);
+void incrementPallete() {
+  static uint8_t currentHue;
+  leds.fill_rainbow(currentHue++, 3);
 }
 
 // ----- Program Switching -----
 // ----- BLACK (Off) -----
 void enablePrgBlack() {
+  Serial.println("Enable Program Black");
   prgBlackTicker.attach_ms_scheduled(1000, prgBlackDo);
 }
 
 void disablePrgBlack() {
+  Serial.println("Disable Program Black");
   prgBlackTicker.detach();
 }
 
 void prgBlackDo() {
+  Serial.println("BLACK-2");
   leds.fill_solid(CRGB::Black);
 }
 
 // ----- White 50% -----
 void enablePrgWhite50() {
-
+  Serial.println("Enable Program White50");
 }
 
 void disablePrgWhite50() {
-
+  Serial.println("Disable Program White50");
 }
 
 // ----- Rainbow -----
 void enablePrgRainbow() {
-
+  Serial.println("Enable Program Rainbow");
+  rainbowTicker.attach_ms_scheduled(statusActive.speed, incrementPallete);
 }
 
 void disablePrgRainbow() {
-
+  Serial.println("Disable Program Rainbow");
+  rainbowTicker.detach();
 }
 
 // ----- Twinkly -----
 void enablePrgTwinkle() {
-
+  Serial.println("Enable Program Twinkle");
 }
 
 void disablePrgTwinkle() {
-
+  Serial.println("Disable Program Twinkle");
 }
 
 // ----- Disable All -----
 void disableAllPrg() {
+  Serial.println("Disable Program All");
+
   disablePrgBlack();
   disablePrgWhite50();
   disablePrgRainbow();
   disablePrgTwinkle();
 
-  enablePrgBlack();
+  // enablePrgBlack();
 }

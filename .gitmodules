@@ -1,0 +1,3 @@
+[submodule "WifiLEDController-Slave/lib/FastLED"]
+	path = WifiLEDController-Slave/lib/FastLED
+	url = https://github.com/coryking/FastLED.git
