@@ -22,12 +22,13 @@ struct __attribute__((packed)) status_t
   uint16_t speed;
   uint16_t width;
   uint16_t refresh_period_ms;
-  uint32_t timestamp;
+  uint8_t maxbright;
 };
 
 struct __attribute__((packed)) command_t
 {
   command_type_t cmd;
+  uint32_t timestamp;
   status_t stat;
 };
 

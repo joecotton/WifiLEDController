@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
+#include <ESPRotary.h>
+#include <Button2.h>
 
 extern "C"
 {
@@ -28,6 +30,9 @@ uint8_t mac[]       = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 
 #define CHANNEL 1
 #define STATUS_LED D1
+#define ROTARY_A D3
+#define ROTARY_B D2
+#define ROTARY_BUTTON D4
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -48,6 +53,11 @@ void sendPing();
 void watchdogReset();
 void watchdogExpire();
 
+void rotate(ESPRotary& r);
+void showDirection(ESPRotary& r);
+void showPosition(Button2& btn);
+void click(Button2& btn);
+
 bool retry = true;
 
 uint8_t pendingStatus = 0;
@@ -55,11 +65,19 @@ uint8_t pendingCommand = 0;
 uint8_t isConnected = 0;
 uint8_t pendingPongIn = 0;
 
+uint32_t remoteTimestamp = 0L;
+
+uint32_t position = 0;
+uint8_t buttonState = 0;
+
 Ticker reqStatusTicker;
 Ticker ledTicker;
 Ticker toggleActiveTicker;
 Ticker watchdogTicker;
 Ticker pingTicker;
+
+ESPRotary rotary = ESPRotary(ROTARY_A, ROTARY_B, 4);
+Button2 button = Button2(ROTARY_BUTTON, INPUT_PULLUP, 20U);
 
 void setup()
 {
@@ -88,6 +106,13 @@ void setup()
     // digitalWrite(STATUS_LED, LOW);
   }
 
+  rotary.setChangedHandler(rotate);
+  rotary.setLeftRotationHandler(showDirection);
+  rotary.setRightRotationHandler(showDirection);
+
+  button.setClickHandler(click);
+  // button.setLongClickHandler(resetPosition);
+
   // reqStatusTicker.attach_ms(2000, requestStatus);
   // toggleActiveTicker.attach_ms(876, toggleActiveAndSend);
   pingTicker.attach_ms_scheduled(1000, sendPing);
@@ -98,21 +123,8 @@ void loop()
   handleCommand();
   handlePong();
 
-  // if (pendingStatus) {
-  //   Serial.println("Incoming status:");
-  //   memcpy(&statusLocal, &(commandBufferIn.stat), sizeof(statusLocal));
-  //   Serial.print("  active: ");
-  //   Serial.println(statusLocal.active);
-  //   Serial.print("  program: ");
-  //   Serial.println(statusLocal.program);
-  //   Serial.print("  speed: ");
-  //   Serial.println(statusLocal.speed);
-  //   Serial.print("  refresh_period_ms: ");
-  //   Serial.println(statusLocal.refresh_period_ms);
-  //   Serial.print("  timestamp: ");
-  //   Serial.println(statusLocal.timestamp);
-  //   pendingStatus = 0;
-  // }
+  rotary.loop();
+  button.loop();
 
   if (isConnected) {
     digitalWrite(STATUS_LED, HIGH);
@@ -179,6 +191,7 @@ void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
 void requestStatus() {
   // Serial.println("Requesting Status");
   commandBufferOut.cmd=WLEDC_CMD_GETSTATUS;
+  commandBufferOut.timestamp=millis();
   memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
   esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
 }
@@ -201,6 +214,7 @@ void sendStatus() {
 void sendCommand(command_type_t command) {
   // Serial.println("Sending requested Status");
   commandBufferOut.cmd=command;
+  commandBufferOut.timestamp=millis();
   memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
   esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
 }
@@ -226,9 +240,9 @@ void watchdogExpire() {
 }
 
 void watchdogReset() {
-  // watchdogTicker.detach();
   isConnected = 1;
-  watchdogTicker.once_ms_scheduled(1200, watchdogExpire);
+  watchdogTicker.detach();
+  watchdogTicker.attach_ms_scheduled(1200, watchdogExpire);
 }
 
 void handleCommand() {
@@ -264,7 +278,25 @@ void handleCommand() {
 
     // Copy status that was sent by the client
     memcpy(&(commandBufferIn.stat), &statusRemote, sizeof(statusRemote));
+    remoteTimestamp = commandBufferIn.timestamp;
 
     pendingCommand = 0;
   }
+}
+
+// Encoder/Button
+void rotate(ESPRotary& r) {
+   Serial.println(r.getPosition());
+}
+
+void showDirection(ESPRotary& r) {
+  Serial.println(r.directionToString(r.getDirection()));
+}
+
+void showPosition(Button2& btn) {
+  Serial.println(rotary.getPosition());
+}
+
+void click(Button2& btn) {
+  Serial.println("click\n");
 }
