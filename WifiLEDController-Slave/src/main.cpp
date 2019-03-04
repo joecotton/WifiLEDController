@@ -43,10 +43,11 @@ void initVariant()
 #define WSPIN 3
 // #define WSPIN D8
 #define WSLEDS 100
-#define WSMAXBRIGHT 64
+#define WSMAXBRIGHT 88
 #define LED_UPDATE_PERIOD 17
 #define DEFAULT_SPEED 24
 #define DEFAULT_WIDTH 1
+#define DEFAULT_COUNT 2
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -78,12 +79,16 @@ void handleSpeed();
 void handleProgram();
 void handleWidth();
 void handleRefresh();
+void handleMaxBright();
+void handleCount();
 
 void updateProgram();
 void updateActive();
 void updateSpeed();
-void updateWidth());
+void updateWidth();
 void updateRefresh();
+void updateMaxBright();
+void updateCount();
 
 void enablePrgBlack();
 void disablePrgBlack();
@@ -105,6 +110,7 @@ void disableAllPrg();
 
 uint8_t pendingPongOut = 0;
 uint8_t isConnected = 0;
+uint32_t remoteTimestamp = 0L;
 
 Ticker ledTicker;
 Ticker watchdogTicker;
@@ -126,18 +132,18 @@ void setup()
   statusActive.speed             = DEFAULT_SPEED;
   statusActive.width             = DEFAULT_WIDTH;
   statusActive.refresh_period_ms = LED_UPDATE_PERIOD;
+  statusActive.maxbright         = WSMAXBRIGHT;
+  statusActive.count             = DEFAULT_COUNT;
 
-  statusLocal.active            = 1;
-  statusLocal.program           = WLEDC_PRG_RAINBOW;
-  statusLocal.speed             = DEFAULT_SPEED;
-  statusLocal.width             = DEFAULT_WIDTH;
-  statusLocal.refresh_period_ms = LED_UPDATE_PERIOD;
-  statusLocal.timestamp         = millis();
+  statusLocal.active             = 1;
+  statusLocal.program            = WLEDC_PRG_RAINBOW;
+  statusLocal.speed              = DEFAULT_SPEED;
+  statusLocal.width              = DEFAULT_WIDTH;
+  statusLocal.refresh_period_ms  = LED_UPDATE_PERIOD;
+  statusLocal.maxbright          = WSMAXBRIGHT;
+  statusLocal.count              = 2;
   pendingStatus = 1;
-  // Copy local to active.
-  // memcpy(&statusActive, &statusLocal, sizeof(statusLocal));
 
-  // initVariant();
   InitWifi();
 
   Serial.print("This node AP mac: ");
@@ -149,7 +155,8 @@ void setup()
   pinMode(STATUS_LED, OUTPUT);
 
   LEDS.addLeds<WS2812, WSPIN, GRB>(leds, WSLEDS);
-  FastLED.setBrightness(WSMAXBRIGHT);
+  FastLED.setBrightness(statusActive.maxbright);
+  FastLED.setCorrection(Typical8mmPixel);
 
   currentPalette = RainbowColors_p;
   currentBlending = LINEARBLEND;
@@ -172,8 +179,6 @@ void loop()
   handleCommand();
   handlePing();
   handleStatus();
-
-  statusLocal.timestamp = millis();
 
   if (isConnected) {
     digitalWrite(STATUS_LED, HIGH);
@@ -265,37 +270,38 @@ void watchdogReset() {
 }
 
 void handleCommand() {
-  if (pendingCommand)
-  {
-    switch (commandBufferIn.cmd)
-    {
-    case WLEDC_CMD_NULL:
-      // Null means do nothing
-      // Serial.println("NULL CMD");
-      break;
-    case WLEDC_CMD_OFF:
-      // Serial.println("OFF CMD");
-      statusLocal.active = 0;
-      pendingStatus = 1;
-      break;
-    case WLEDC_CMD_GETSTATUS:
-      // The status has been requested. We should send it.
-      sendStatus();
-      break;
-    case WLEDC_CMD_SETSTATUS:
-      // A new status has been sent. We should update our local copy.
-      memcpy(&statusLocal, &(commandBufferIn.stat), sizeof(commandBufferIn.stat));
-      pendingStatus = 1;
-      break;
-    case WLEDC_CMD_STATUS:
-      // Not for us to receive
-      break;
-    case WLEDC_CMD_PING:
-      pendingPongOut = 1;
-      break;
-    case WLEDC_CMD_PONG:
-      // Not for us to receive
-      break;
+  if (pendingCommand) {
+
+    remoteTimestamp = commandBufferIn.timestamp;
+
+    switch (commandBufferIn.cmd) {
+      case WLEDC_CMD_NULL:
+        // Null means do nothing
+        // Serial.println("NULL CMD");
+        break;
+      case WLEDC_CMD_OFF:
+        // Serial.println("OFF CMD");
+        statusLocal.active = 0;
+        pendingStatus = 1;
+        break;
+      case WLEDC_CMD_GETSTATUS:
+        // The status has been requested. We should send it.
+        sendStatus();
+        break;
+      case WLEDC_CMD_SETSTATUS:
+        // A new status has been sent. We should update our local copy.
+        memcpy(&statusLocal, &(commandBufferIn.stat), sizeof(commandBufferIn.stat));
+        pendingStatus = 1;
+        break;
+      case WLEDC_CMD_STATUS:
+        // Not for us to receive
+        break;
+      case WLEDC_CMD_PING:
+        pendingPongOut = 1;
+        break;
+      case WLEDC_CMD_PONG:
+        // Not for us to receive
+        break;
     };
     pendingCommand = 0;
   }
@@ -307,7 +313,9 @@ void handleStatus() {
     handleProgram();
     handleSpeed();
     handleWidth();
+    handleMaxBright();
     handleRefresh();
+    handleCount();
     pendingStatus = 0;
   }
 }
@@ -345,6 +353,20 @@ void handleRefresh() {
   if (statusActive.refresh_period_ms != statusLocal.refresh_period_ms) {
     statusActive.refresh_period_ms = statusLocal.refresh_period_ms;
     updateRefresh();
+  }
+}
+
+void handleMaxBright() {
+  if (statusActive.maxbright != statusLocal.maxbright) {
+    statusActive.maxbright = statusLocal.maxbright;
+    updateMaxBright();
+  }
+}
+
+void handleCount() {
+  if (statusActive.count != statusLocal.count) {
+    statusActive.count = statusLocal.count;
+    updateCount();
   }
 }
 
@@ -406,10 +428,21 @@ void updateWidth() {
 
 void updateRefresh() {
   Serial.println("Updating Refresh Period");
-  if (ledDisplayTicker.active) {
+  if (ledDisplayTicker.active()) {
     ledDisplayTicker.detach();
     ledDisplayTicker.attach_ms_scheduled(statusActive.refresh_period_ms, drawLEDs);
   }
+}
+
+void updateMaxBright() {
+  Serial.print("Updating Maximum Bright Level: ");
+  Serial.println(statusActive.maxbright);
+  FastLED.setBrightness(statusActive.maxbright);
+}
+
+void updateCount() {
+  Serial.println("Updating Count");
+  Serial.println(statusActive.count);
 }
 
 //-------------
@@ -425,8 +458,10 @@ void drawLEDs() {
 void incrementPallete() {
   static uint8_t currentHue;
   currentHue += statusActive.width;
-  // currentHue += 1;
-  leds.fill_rainbow(currentHue, 3);
+  // leds.fill_rainbow(currentHue);
+  leds.fill_rainbow(currentHue, (uint8_t)statusActive.count);
+  // leds.fill_rainbow(currentHue, 1);
+  // Serial.println(statusActive.count);
 }
 
 // ----- Program Switching -----
