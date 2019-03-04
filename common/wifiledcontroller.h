@@ -23,6 +23,7 @@ struct __attribute__((packed)) status_t
   uint16_t width;
   uint16_t refresh_period_ms;
   uint8_t maxbright;
+  uint16_t count;
 };
 
 struct __attribute__((packed)) command_t
