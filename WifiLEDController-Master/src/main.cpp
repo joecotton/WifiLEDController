@@ -110,12 +110,14 @@ void setup()
   rotary.setLeftRotationHandler(showDirection);
   rotary.setRightRotationHandler(showDirection);
 
-  button.setClickHandler(click);
+  button.setReleasedHandler(click);
   // button.setLongClickHandler(resetPosition);
 
   // reqStatusTicker.attach_ms(2000, requestStatus);
   // toggleActiveTicker.attach_ms(876, toggleActiveAndSend);
   pingTicker.attach_ms_scheduled(1000, sendPing);
+
+  sendCommand(WLEDC_CMD_GETSTATUS);
 }
 
 void loop()
