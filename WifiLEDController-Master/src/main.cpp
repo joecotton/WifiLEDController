@@ -12,6 +12,26 @@ extern "C"
 
 #include "../../common/wifiledcontroller.h"
 
+enum menu_t : uint8_t {
+  WLEDC_MENU_PROGRAM,
+  WLEDC_MENU_SPEED,
+  WLEDC_MENU_WIDTH,
+  WLEDC_MENU_COUNT,
+  WLEDC_MENU_BRIGHT,
+  WLEDC_MENU_REFRESHPERIOD
+};
+
+char* menuTitles[] = {
+  "Program",
+  "Speed",
+  "Width",
+  "Count",
+  "Brightness",
+  "Refresh Period"
+};
+
+menu_t currentMenu = WLEDC_MENU_PROGRAM;
+
 status_t statusLocal;
 status_t statusRemote;
 command_t commandBufferOut;
