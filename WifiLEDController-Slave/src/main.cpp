@@ -45,9 +45,9 @@ void initVariant()
 #define WSLEDS 100
 #define WSMAXBRIGHT 88
 #define LED_UPDATE_PERIOD 17
-#define DEFAULT_SPEED 24
+#define DEFAULT_SPEED 18
 #define DEFAULT_WIDTH 1
-#define DEFAULT_COUNT 2
+#define DEFAULT_COUNT 1
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
