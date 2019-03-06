@@ -12,25 +12,19 @@ extern "C"
 
 #include "../../common/wifiledcontroller.h"
 
-enum menu_t : uint8_t {
-  WLEDC_MENU_PROGRAM,
-  WLEDC_MENU_SPEED,
-  WLEDC_MENU_WIDTH,
-  WLEDC_MENU_COUNT,
-  WLEDC_MENU_BRIGHT,
-  WLEDC_MENU_REFRESHPERIOD
-};
-
 char* menuTitles[] = {
-  "Program",
-  "Speed",
-  "Width",
-  "Count",
-  "Brightness",
-  "Refresh Period"
+  "Program",        // 0
+  "Speed",          // 1
+  "Width",          // 2
+  "Count",          // 3
+  "Brightness",     // 4
+  "Refresh Period",  // 5
+  "Active"  // 6
 };
 
-menu_t currentMenu = WLEDC_MENU_PROGRAM;
+const uint8_t MENUCOUNT = 7;
+uint8_t currentMenu = 0;
+uint8_t menuDirty = 1;
 
 status_t statusLocal;
 status_t statusRemote;
@@ -65,8 +59,13 @@ void toggleActiveAndSend();
 
 void handleCommand();
 void handlePong();
+void handlePendingSendStatus();
+void handlePendingRecvStatus();
 
-void sendStatus();
+void handleMenu();
+void printMenuState(uint8_t selected);
+void printStatusValue(uint8_t selected);
+
 void sendCommand(command_type_t command);
 void sendPing();
 
@@ -75,15 +74,17 @@ void watchdogExpire();
 
 void rotate(ESPRotary& r);
 void showDirection(ESPRotary& r);
+void handleRotate(ESPRotary& r);
 void showPosition(Button2& btn);
 void click(Button2& btn);
 
 bool retry = true;
 
-uint8_t pendingStatus = 0;
+uint8_t pendingStatusIn = 0;
 uint8_t pendingCommand = 0;
 uint8_t isConnected = 0;
 uint8_t pendingPongIn = 0;
+uint8_t pendingStatusOut = 0;
 
 uint32_t remoteTimestamp = 0L;
 
@@ -126,12 +127,20 @@ void setup()
     // digitalWrite(STATUS_LED, LOW);
   }
 
-  rotary.setChangedHandler(rotate);
-  rotary.setLeftRotationHandler(showDirection);
-  rotary.setRightRotationHandler(showDirection);
+  rotary.setChangedHandler(handleRotate);
+  // rotary.setLeftRotationHandler(handleRotate);
+  // rotary.setRightRotationHandler(handleRotate);
 
   button.setReleasedHandler(click);
   // button.setLongClickHandler(resetPosition);
+
+  statusLocal.active             = DEFAULT_ACTIVE;
+  statusLocal.program            = DEFAULT_PROGRAM;
+  statusLocal.speed              = DEFAULT_SPEED;
+  statusLocal.width              = DEFAULT_WIDTH;
+  statusLocal.refresh_period_ms  = DEFAULT_REFRESH;
+  statusLocal.maxbright          = DEFAULT_BRIGHT;
+  statusLocal.count              = DEFAULT_COUNT;
 
   // reqStatusTicker.attach_ms(2000, requestStatus);
   // toggleActiveTicker.attach_ms(876, toggleActiveAndSend);
@@ -143,8 +152,11 @@ void setup()
 void loop()
 {
   handleCommand();
+  handlePendingSendStatus();
+  handlePendingRecvStatus();
   handlePong();
-
+  handleMenu();
+  
   rotary.loop();
   button.loop();
 
@@ -210,14 +222,6 @@ void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
   ledTicker.once_ms_scheduled(8, flickLED);
 }
 
-void requestStatus() {
-  // Serial.println("Requesting Status");
-  commandBufferOut.cmd=WLEDC_CMD_GETSTATUS;
-  commandBufferOut.timestamp=millis();
-  memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
-  esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
-}
-
 void flickLED() {
   // ledTicker.detach();
   digitalWrite(LED_BUILTIN, HIGH);
@@ -225,12 +229,11 @@ void flickLED() {
 
 void toggleActiveAndSend() {
   statusLocal.active = !(statusLocal.active);
-  sendStatus();
+  sendCommand(WLEDC_CMD_SETSTATUS);
 }
 
-void sendStatus() {
-  // Serial.println("Sending Status");
-  sendCommand(WLEDC_CMD_SETSTATUS);
+void requestStatus() {
+  sendCommand(WLEDC_CMD_GETSTATUS);
 }
 
 void sendCommand(command_type_t command) {
@@ -238,7 +241,30 @@ void sendCommand(command_type_t command) {
   commandBufferOut.cmd=command;
   commandBufferOut.timestamp=millis();
   memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
+
+  if (command == WLEDC_CMD_GETSTATUS) {
+    pendingStatusIn = 1;
+  }
+
   esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
+}
+
+void handlePendingSendStatus() {
+  if (pendingStatusOut) {
+    sendCommand(WLEDC_CMD_SETSTATUS);
+    reqStatusTicker.once_ms(100, requestStatus);
+
+    sendCommand(WLEDC_CMD_GETSTATUS);
+    pendingStatusOut = 0;
+  }
+}
+
+void handlePendingRecvStatus() {
+  // Copy the remote status to our local copy
+  if (pendingStatusIn) {
+    // memcpy(&statusLocal, &statusRemote, sizeof(statusLocal));
+    pendingStatusIn = 0;
+  }
 }
 
 void sendPing() {
@@ -288,6 +314,7 @@ void handleCommand() {
       // Serial.println("SETSTATUS CMD");
       break;
     case WLEDC_CMD_STATUS:
+      // Contains remote status
       break;
     case WLEDC_CMD_PING:
       // Server doesn't get PINGed
@@ -298,8 +325,9 @@ void handleCommand() {
       break;
     };
 
-    // Copy status that was sent by the client
-    memcpy(&(commandBufferIn.stat), &statusRemote, sizeof(statusRemote));
+    // Copy status that was returned from the client
+    memcpy(&statusRemote, &(commandBufferIn.stat), sizeof(commandBufferIn.stat));
+    // memcpy(&(commandBufferIn.stat), &statusRemote, sizeof(statusRemote));
     remoteTimestamp = commandBufferIn.timestamp;
 
     pendingCommand = 0;
@@ -311,14 +339,158 @@ void rotate(ESPRotary& r) {
    Serial.println(r.getPosition());
 }
 
-void showDirection(ESPRotary& r) {
-  Serial.println(r.directionToString(r.getDirection()));
-}
-
 void showPosition(Button2& btn) {
   Serial.println(rotary.getPosition());
 }
 
 void click(Button2& btn) {
-  Serial.println("click\n");
+  // Serial.println("click\n");
+}
+
+void handleRotate(ESPRotary& r) {
+  if (button.isPressed()) {
+    // Button is pressed
+    // Change the current menuy
+    if (r.getDirection() == RE_LEFT) {
+      // Counter-clockwise
+      if (currentMenu==0) {
+        // At bottom, resstart to top
+        currentMenu = MENUCOUNT;
+      }
+      currentMenu--;
+    } else {
+      // Clockwise
+      currentMenu++;
+      if (currentMenu >= MENUCOUNT) {
+        // At top
+        currentMenu = 0;
+      }
+    }
+  } else {
+    // Button is not pressed
+    // Change the value of current menu item
+    switch (currentMenu) {
+      case 0: // Program
+        switch (statusLocal.program) {
+          case WLEDC_PRG_BLACK:
+          if (r.getDirection() == RE_LEFT)
+            statusLocal.program = WLEDC_PRG_TWINKLE;
+          else
+            statusLocal.program = WLEDC_PRG_WHITE50;
+          break;
+          case WLEDC_PRG_WHITE50:
+          if (r.getDirection() == RE_LEFT)
+            statusLocal.program = WLEDC_PRG_BLACK;
+          else
+            statusLocal.program = WLEDC_PRG_RAINBOW;
+          break;
+          case WLEDC_PRG_RAINBOW:
+          if (r.getDirection() == RE_LEFT)
+            statusLocal.program = WLEDC_PRG_WHITE50;
+          else
+            statusLocal.program = WLEDC_PRG_TWINKLE;
+          break;
+          case WLEDC_PRG_TWINKLE:
+          if (r.getDirection() == RE_LEFT)
+            statusLocal.program = WLEDC_PRG_RAINBOW;
+          else
+            statusLocal.program = WLEDC_PRG_BLACK;
+          break;
+        }
+        break;
+      case 1: // Speed
+        if (r.getDirection() == RE_LEFT)
+          statusLocal.speed--;
+        else
+          statusLocal.speed++;
+        break;
+      case 2: // Width
+        if (r.getDirection() == RE_LEFT)
+          statusLocal.width--;
+        else
+          statusLocal.width++;
+        break;
+      case 3: // Count
+        if (r.getDirection() == RE_LEFT)
+          statusLocal.count--;
+        else
+          statusLocal.count++;
+        break;
+      case 4: // Brightness
+        if (r.getDirection() == RE_LEFT)
+          statusLocal.maxbright--;
+        else
+          statusLocal.maxbright++;
+        break;
+      case 5: // Refresh Period
+        if (r.getDirection() == RE_LEFT)
+          statusLocal.refresh_period_ms--;
+        else
+          statusLocal.refresh_period_ms++;
+        break;
+      case 6: // Active
+        if (r.getDirection() == RE_LEFT)
+          statusLocal.active = 0;
+        else
+          statusLocal.active = 1;
+        break;
+    }
+
+    pendingStatusOut = 1;
+  }
+  menuDirty = 1;
+}
+
+void handleMenu() {
+  if (menuDirty) {
+    printMenuState(currentMenu);
+    menuDirty = 0;
+  }
+}
+
+void printMenuState(uint8_t selected) {
+    Serial.print(menuTitles[selected]);
+    Serial.print(": ");
+    printStatusValue(selected);
+    Serial.println();
+}
+
+void printStatusValue(uint8_t selected) {
+  switch (selected) {
+    case 0: // Program
+      Serial.print(statusLocal.program);
+      Serial.print("/");
+      Serial.print(statusRemote.program);
+      break;
+    case 1: // Speed
+      Serial.print(statusLocal.speed);
+      Serial.print("/");
+      Serial.print(statusRemote.speed);
+      break;
+    case 2: // Width
+      Serial.print(statusLocal.width);
+      Serial.print("/");
+      Serial.print(statusRemote.width);
+      break;
+    case 3: // Count
+      Serial.print(statusLocal.count);
+      Serial.print("/");
+      Serial.print(statusRemote.count);
+      break;
+    case 4: // Brightness
+      Serial.print(statusLocal.maxbright);
+      Serial.print("/");
+      Serial.print(statusRemote.maxbright);
+      break;
+    case 5: // Refresh Period
+      Serial.print(statusLocal.refresh_period_ms);
+      Serial.print("/");
+      Serial.print(statusRemote.refresh_period_ms);
+      break;
+    case 6: // Active
+      Serial.print(statusLocal.active);
+      Serial.print("/");
+      Serial.print(statusRemote.active);
+      break;
+  }
 }

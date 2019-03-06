@@ -22,7 +22,7 @@ command_t commandBufferIn;
 
 uint8_t pendingCommand = 0;
 uint8_t pendingStatus = 0;
-uint8_t pendingTransmission = 0;
+// uint8_t pendingTransmission = 0;
 
 /* Set a private Mac Address
  *  http://serverfault.com/questions/40712/what-range-of-mac-addresses-can-i-safely-use-for-my-virtual-machines
@@ -43,11 +43,6 @@ void initVariant()
 #define WSPIN 3
 // #define WSPIN D8
 #define WSLEDS 100
-#define WSMAXBRIGHT 88
-#define LED_UPDATE_PERIOD 17
-#define DEFAULT_SPEED 18
-#define DEFAULT_WIDTH 1
-#define DEFAULT_COUNT 1
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -97,6 +92,8 @@ Ticker prgBlackTicker;
 
 void enablePrgWhite50();
 void disablePrgWhite50();
+void prgWhite50Do();
+Ticker prgWhite50Ticker;
 
 void enablePrgRainbow();
 void disablePrgRainbow();
@@ -127,22 +124,21 @@ void setup()
   Serial.println();
 
   // Initialize status
-  statusActive.active            = 0;
-  statusActive.program           = WLEDC_PRG_BLACK;
+  statusActive.active            = DEFAULT_ACTIVE;
+  statusActive.program           = DEFAULT_PROGRAM;
   statusActive.speed             = DEFAULT_SPEED;
   statusActive.width             = DEFAULT_WIDTH;
-  statusActive.refresh_period_ms = LED_UPDATE_PERIOD;
-  statusActive.maxbright         = WSMAXBRIGHT;
+  statusActive.refresh_period_ms = DEFAULT_REFRESH;
+  statusActive.maxbright         = DEFAULT_BRIGHT;
   statusActive.count             = DEFAULT_COUNT;
 
-  statusLocal.active             = 1;
-  statusLocal.program            = WLEDC_PRG_RAINBOW;
+  statusLocal.active             = DEFAULT_ACTIVE;
+  statusLocal.program            = DEFAULT_PROGRAM;
   statusLocal.speed              = DEFAULT_SPEED;
   statusLocal.width              = DEFAULT_WIDTH;
-  statusLocal.refresh_period_ms  = LED_UPDATE_PERIOD;
-  statusLocal.maxbright          = WSMAXBRIGHT;
-  statusLocal.count              = 2;
-  pendingStatus = 1;
+  statusLocal.refresh_period_ms  = DEFAULT_REFRESH;
+  statusLocal.maxbright          = DEFAULT_BRIGHT;
+  statusLocal.count              = DEFAULT_COUNT;
 
   InitWifi();
 
@@ -211,9 +207,9 @@ void InitESPNow() {
 }
 
 void onDataSent(uint8_t* macaddr, uint8_t status) {
-  pendingTransmission = 0;
+  // pendingTransmission = 0;
   digitalWrite(LED_BUILTIN, LOW);
-  ledTicker.once_ms_scheduled(80, flickLED);
+  ledTicker.once_ms(10, flickLED);
 }
 
 void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
@@ -226,7 +222,7 @@ void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
       pendingCommand = 1;
     }
     digitalWrite(LED_BUILTIN, LOW);
-    ledTicker.once_ms_scheduled(8, flickLED);
+    ledTicker.once_ms(8, flickLED);
   }
 }
 
@@ -243,7 +239,7 @@ void sendStatus() {
 void sendCommand(command_type_t command) {
   commandBufferOut.cmd=command;
   memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
-  pendingTransmission = 1;
+  // pendingTransmission = 1;
   esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
 }
 
@@ -351,7 +347,13 @@ void handleWidth() {
 
 void handleRefresh() {
   if (statusActive.refresh_period_ms != statusLocal.refresh_period_ms) {
-    statusActive.refresh_period_ms = statusLocal.refresh_period_ms;
+    if (statusLocal.refresh_period_ms < WLEDC_MIN_REFRESH) {
+      statusActive.refresh_period_ms = WLEDC_MIN_REFRESH;
+    } else if (statusLocal.refresh_period_ms > WLEDC_MAX_REFRESH) {
+      statusActive.refresh_period_ms = WLEDC_MAX_REFRESH;
+    } else {
+      statusActive.refresh_period_ms = statusLocal.refresh_period_ms;
+    }
     updateRefresh();
   }
 }
@@ -430,7 +432,7 @@ void updateRefresh() {
   Serial.println("Updating Refresh Period");
   if (ledDisplayTicker.active()) {
     ledDisplayTicker.detach();
-    ledDisplayTicker.attach_ms_scheduled(statusActive.refresh_period_ms, drawLEDs);
+    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
   }
 }
 
@@ -450,9 +452,9 @@ void updateCount() {
 //-------------
 
 void drawLEDs() {
-  if (!pendingTransmission) {
+  // if (!pendingTransmission) {
     FastLED.show();
-  }
+  // }
 }
 
 void incrementPallete() {
@@ -468,7 +470,8 @@ void incrementPallete() {
 // ----- BLACK (Off) -----
 void enablePrgBlack() {
   Serial.println("Enable Program Black");
-  prgBlackTicker.attach_ms_scheduled(1000, prgBlackDo);
+  prgBlackDo();
+  prgBlackTicker.attach_ms(1000, prgBlackDo);
 }
 
 void disablePrgBlack() {
@@ -483,16 +486,23 @@ void prgBlackDo() {
 // ----- White 50% -----
 void enablePrgWhite50() {
   Serial.println("Enable Program White50");
+  prgWhite50Do();
+  prgWhite50Ticker.attach_ms(1000, prgWhite50Do);
 }
 
 void disablePrgWhite50() {
   Serial.println("Disable Program White50");
+  prgWhite50Ticker.detach();
+}
+
+void prgWhite50Do() {
+  leds.fill_solid(0x7F7F7F);
 }
 
 // ----- Rainbow -----
 void enablePrgRainbow() {
   Serial.println("Enable Program Rainbow");
-  rainbowTicker.attach_ms_scheduled(statusActive.speed, incrementPallete);
+  rainbowTicker.attach_ms(statusActive.speed, incrementPallete);
 }
 
 void disablePrgRainbow() {
@@ -512,6 +522,9 @@ void disablePrgTwinkle() {
 // ----- Disable All -----
 void disableAllPrg() {
   Serial.println("Disable Program All");
+
+  leds.fill_solid(CRGB::Black);
+  FastLED.show();
 
   disablePrgBlack();
   disablePrgWhite50();
