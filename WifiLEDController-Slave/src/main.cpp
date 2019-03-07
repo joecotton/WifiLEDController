@@ -58,6 +58,8 @@ void flickLED();
 void handleCommand();
 void handlePing();
 
+void printState(status_t state);
+
 void watchdogReset();
 void watchdogExpire();
 
@@ -130,7 +132,7 @@ void setup()
   statusActive.width             = DEFAULT_WIDTH;
   statusActive.refresh_period_ms = DEFAULT_REFRESH;
   statusActive.maxbright         = DEFAULT_BRIGHT;
-  statusActive.count             = DEFAULT_COUNT;
+  statusActive.step              = DEFAULT_STEP;
 
   statusLocal.active             = DEFAULT_ACTIVE;
   statusLocal.program            = DEFAULT_PROGRAM;
@@ -138,7 +140,7 @@ void setup()
   statusLocal.width              = DEFAULT_WIDTH;
   statusLocal.refresh_period_ms  = DEFAULT_REFRESH;
   statusLocal.maxbright          = DEFAULT_BRIGHT;
-  statusLocal.count              = DEFAULT_COUNT;
+  statusLocal.step               = DEFAULT_STEP;
 
   InitWifi();
 
@@ -299,6 +301,12 @@ void handleCommand() {
         // Not for us to receive
         break;
     };
+
+    Serial.println("handleCommand/local");
+    printState(statusLocal);
+    Serial.println("handleCommand/active");
+    printState(statusActive);
+
     pendingCommand = 0;
   }
 }
@@ -366,8 +374,8 @@ void handleMaxBright() {
 }
 
 void handleCount() {
-  if (statusActive.count != statusLocal.count) {
-    statusActive.count = statusLocal.count;
+  if (statusActive.step != statusLocal.step) {
+    statusActive.step = statusLocal.step;
     updateCount();
   }
 }
@@ -444,7 +452,7 @@ void updateMaxBright() {
 
 void updateCount() {
   Serial.println("Updating Count");
-  Serial.println(statusActive.count);
+  Serial.println(statusActive.step);
 }
 
 //-------------
@@ -461,9 +469,9 @@ void incrementPallete() {
   static uint8_t currentHue;
   currentHue += statusActive.width;
   // leds.fill_rainbow(currentHue);
-  leds.fill_rainbow(currentHue, (uint8_t)statusActive.count);
+  leds.fill_rainbow(currentHue, (uint8_t)statusActive.step);
   // leds.fill_rainbow(currentHue, 1);
-  // Serial.println(statusActive.count);
+  // Serial.println(statusActive.step);
 }
 
 // ----- Program Switching -----
@@ -532,4 +540,20 @@ void disableAllPrg() {
   disablePrgTwinkle();
 
   // enablePrgBlack();
+}
+
+void printState(status_t state) {
+  Serial.print("P:");
+  Serial.print(state.program);
+  Serial.print(" A:");
+  Serial.print(state.active);
+  Serial.print(" W:");
+  Serial.print(state.width);
+  Serial.print(" C:");
+  Serial.print(state.step);
+  Serial.print(" B:");
+  Serial.print(state.maxbright);
+  Serial.print(" S:");
+  Serial.print(state.speed);
+  Serial.println();
 }

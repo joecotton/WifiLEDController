@@ -46,7 +46,7 @@ uint8_t mac[]       = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 #define STATUS_LED D1
 #define ROTARY_A D3
 #define ROTARY_B D2
-#define ROTARY_BUTTON D4
+#define ROTARY_BUTTON D7
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -65,6 +65,7 @@ void handlePendingRecvStatus();
 void handleMenu();
 void printMenuState(uint8_t selected);
 void printStatusValue(uint8_t selected);
+void printState(status_t state);
 
 void sendCommand(command_type_t command);
 void sendPing();
@@ -85,6 +86,7 @@ uint8_t pendingCommand = 0;
 uint8_t isConnected = 0;
 uint8_t pendingPongIn = 0;
 uint8_t pendingStatusOut = 0;
+uint8_t initialStatusGet = 5;
 
 uint32_t remoteTimestamp = 0L;
 
@@ -140,22 +142,27 @@ void setup()
   statusLocal.width              = DEFAULT_WIDTH;
   statusLocal.refresh_period_ms  = DEFAULT_REFRESH;
   statusLocal.maxbright          = DEFAULT_BRIGHT;
-  statusLocal.count              = DEFAULT_COUNT;
+  statusLocal.step               = DEFAULT_STEP;
 
   // reqStatusTicker.attach_ms(2000, requestStatus);
   // toggleActiveTicker.attach_ms(876, toggleActiveAndSend);
   pingTicker.attach_ms_scheduled(1000, sendPing);
 
-  sendCommand(WLEDC_CMD_GETSTATUS);
+  // Serial.println("setup/local");
+  // printState(statusLocal);
+  // Serial.println("setup/remote");
+  // printState(statusRemote);
+
+  requestStatus();
 }
 
 void loop()
 {
-  handleCommand();
-  handlePendingSendStatus();
   handlePendingRecvStatus();
+  handlePendingSendStatus();
   handlePong();
   handleMenu();
+  handleCommand();
   
   rotary.loop();
   button.loop();
@@ -242,7 +249,7 @@ void sendCommand(command_type_t command) {
   commandBufferOut.timestamp=millis();
   memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
 
-  if (command == WLEDC_CMD_GETSTATUS) {
+  if (command == WLEDC_CMD_GETSTATUS || command == WLEDC_CMD_PING) {
     pendingStatusIn = 1;
   }
 
@@ -262,7 +269,24 @@ void handlePendingSendStatus() {
 void handlePendingRecvStatus() {
   // Copy the remote status to our local copy
   if (pendingStatusIn) {
-    // memcpy(&statusLocal, &statusRemote, sizeof(statusLocal));
+    // Serial.println("pendingStatusIn=1");
+
+      // Serial.println("handlePendingRecvStatus-1/local");
+      // printState(statusLocal);
+      // Serial.println("handlePendingRecvStatus-1/remote");
+      // printState(statusRemote);
+
+    if (initialStatusGet) {
+      // Serial.println("initialStatusGet=1");
+      memcpy(&statusLocal, &statusRemote, sizeof(statusLocal));
+
+      // Serial.println("handlePendingRecvStatus-1/local");
+      // printState(statusLocal);
+      // Serial.println("handlePendingRecvStatus-2/remote");
+      // printState(statusRemote);
+
+      initialStatusGet--;
+    }
     pendingStatusIn = 0;
   }
 }
@@ -325,9 +349,16 @@ void handleCommand() {
       break;
     };
 
+    // Serial.println("handleCommand-1/remote");
+    // printState(statusRemote);
+
     // Copy status that was returned from the client
     memcpy(&statusRemote, &(commandBufferIn.stat), sizeof(commandBufferIn.stat));
-    // memcpy(&(commandBufferIn.stat), &statusRemote, sizeof(statusRemote));
+
+    // Serial.println("handleCommand-2/remote");
+    // printState(statusRemote);
+
+
     remoteTimestamp = commandBufferIn.timestamp;
 
     pendingCommand = 0;
@@ -412,9 +443,9 @@ void handleRotate(ESPRotary& r) {
         break;
       case 3: // Count
         if (r.getDirection() == RE_LEFT)
-          statusLocal.count--;
+          statusLocal.step--;
         else
-          statusLocal.count++;
+          statusLocal.step++;
         break;
       case 4: // Brightness
         if (r.getDirection() == RE_LEFT)
@@ -473,9 +504,9 @@ void printStatusValue(uint8_t selected) {
       Serial.print(statusRemote.width);
       break;
     case 3: // Count
-      Serial.print(statusLocal.count);
+      Serial.print(statusLocal.step);
       Serial.print("/");
-      Serial.print(statusRemote.count);
+      Serial.print(statusRemote.step);
       break;
     case 4: // Brightness
       Serial.print(statusLocal.maxbright);
@@ -493,4 +524,20 @@ void printStatusValue(uint8_t selected) {
       Serial.print(statusRemote.active);
       break;
   }
+}
+
+void printState(status_t state) {
+  Serial.print("P:");
+  Serial.print(state.program);
+  Serial.print(" A:");
+  Serial.print(state.active);
+  Serial.print(" W:");
+  Serial.print(state.width);
+  Serial.print(" C:");
+  Serial.print(state.step);
+  Serial.print(" B:");
+  Serial.print(state.maxbright);
+  Serial.print(" S:");
+  Serial.print(state.speed);
+  Serial.println();
 }

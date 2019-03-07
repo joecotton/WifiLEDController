@@ -23,7 +23,7 @@ struct __attribute__((packed)) status_t
   uint16_t width;
   uint16_t refresh_period_ms;
   uint16_t maxbright;
-  uint16_t count;
+  uint16_t step;
 };
 
 struct __attribute__((packed)) command_t
@@ -39,15 +39,15 @@ struct __attribute__((packed)) command_t
 #define WLEDC_MIN_WIDTH 0
 #define WLEDC_MAX_REFRESH 65535
 #define WLEDC_MIN_REFRESH 4
-#define WLEDC_MAX_COUNT 255
-#define WLEDC_MIN_COUNT 0
+#define WLEDC_MAX_STEP 255
+#define WLEDC_MIN_STEP 0
 #define WLEDC_MAX_BRIGHT 255
 #define WLEDC_MIN_BRIGHT 0
 
 #define DEFAULT_SPEED 20
 #define DEFAULT_WIDTH 1
-#define DEFAULT_COUNT 2
+#define DEFAULT_STEP 2
 #define DEFAULT_BRIGHT 32
-#define DEFAULT_PROGRAM 0
+#define DEFAULT_PROGRAM WLEDC_PRG_BLACK
 #define DEFAULT_ACTIVE 0
 #define DEFAULT_REFRESH 17
