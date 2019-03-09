@@ -43,9 +43,9 @@ uint8_t remoteMac[] = {0x36, 0x33, 0x33, 0x33, 0x33, 0x33};
 uint8_t mac[]       = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 
 #define CHANNEL 1
-#define STATUS_LED D1
+#define STATUS_LED D5
 #define ROTARY_A D3
-#define ROTARY_B D2
+#define ROTARY_B D4
 #define ROTARY_BUTTON D7
 
 void printMacAddress(uint8_t* macaddr);
@@ -146,7 +146,7 @@ void setup()
 
   // reqStatusTicker.attach_ms(2000, requestStatus);
   // toggleActiveTicker.attach_ms(876, toggleActiveAndSend);
-  pingTicker.attach_ms_scheduled(1000, sendPing);
+  pingTicker.attach_ms(1000, sendPing);
 
   // Serial.println("setup/local");
   // printState(statusLocal);
@@ -210,7 +210,7 @@ void InitESPNow() {
 
 void onDataSent(uint8_t* macaddr, uint8_t status) {
   digitalWrite(LED_BUILTIN, LOW);
-  ledTicker.once_ms_scheduled(80, flickLED);
+  ledTicker.once_ms(80, flickLED);
   // Serial.println("Data sent successfully");
 }
 
@@ -226,7 +226,7 @@ void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
   }
 
   digitalWrite(LED_BUILTIN, LOW);
-  ledTicker.once_ms_scheduled(8, flickLED);
+  ledTicker.once_ms(8, flickLED);
 }
 
 void flickLED() {
