@@ -264,7 +264,7 @@ void watchdogExpire() {
 void watchdogReset() {
   watchdogTicker.detach();
   isConnected = 1;
-  watchdogTicker.once_ms_scheduled(1200, watchdogExpire);
+  watchdogTicker.once_ms(1200, watchdogExpire);
 }
 
 void handleCommand() {
@@ -384,7 +384,7 @@ void updateActive() {
   Serial.println("Updating Active");
   if (statusActive.active) {
     ledDisplayTicker.detach();
-    ledDisplayTicker.attach_ms_scheduled(statusActive.refresh_period_ms, drawLEDs);
+    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
   } else {
     ledDisplayTicker.detach();
     leds.fill_solid(CRGB::Black);
