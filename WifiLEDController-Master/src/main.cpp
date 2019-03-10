@@ -3,6 +3,7 @@
 #include <Ticker.h>
 #include <ESPRotary.h>
 #include <Button2.h>
+#include <U8g2lib.h>
 
 extern "C"
 {
@@ -102,12 +103,21 @@ Ticker pingTicker;
 ESPRotary rotary = ESPRotary(ROTARY_A, ROTARY_B, 4);
 Button2 button = Button2(ROTARY_BUTTON, INPUT_PULLUP, 20U);
 
+// U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C(rotation, [reset [, clock, data]])
+// U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C(U8G2_R0, U8X8_PIN_NONE);
+// U8G2_SSD1306_128X32_UNIVISION_2_HW_I2C(U8G2_R0, U8X8_PIN_NONE, 4, 5);
+// U8G2_SH1106_128X64_NONAME_F_HW_I2C(U8G2_R0, U8X8_PIN_NONE, 4, 5);
+// U8G2_SSD1306_128X32_UNIVISION_1_HW_I2C(U8G2_R0);
+
+U8G2_SSD1306_128X32_UNIVISION_1_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE, /* clock=*/ SCL, /* data=*/ SDA);   // pin remapping with ESP8266 HW I2C
 void setup()
 {
   pinMode(STATUS_LED, OUTPUT);
   digitalWrite(STATUS_LED, LOW);
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
+
+  u8g2.begin();
 
   Serial.begin(115200);
   Serial.println();
