@@ -1,8 +1,10 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
-#include <ESPRotary.h>
+// #include <ESPRotary.h>
+// #include "AiEsp32RotaryEncoder.h"
 #include <Button2.h>
+#include <Encoder.h>
 #include <U8g2lib.h>
 
 extern "C"
@@ -17,10 +19,17 @@ char* menuTitles[] = {
   "Program",        // 0
   "Speed",          // 1
   "Width",          // 2
-  "Count",          // 3
+  "Step",           // 3
   "Brightness",     // 4
-  "Refresh Period",  // 5
-  "Active"  // 6
+  "Update Speed",   // 5
+  "Active"          // 6
+};
+
+char* programNames[] = {
+  "Black",          // 0
+  "White 50%",      // 1
+  "Rainbow",        // 2
+  "Twinkle"         // 3
 };
 
 const uint8_t MENUCOUNT = 7;
@@ -44,10 +53,23 @@ uint8_t remoteMac[] = {0x36, 0x33, 0x33, 0x33, 0x33, 0x33};
 uint8_t mac[]       = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 
 #define CHANNEL 1
-#define STATUS_LED D5
-#define ROTARY_A D3
-#define ROTARY_B D4
+#define STATUS_LED D3
+#define ROTARY_A D5
+#define ROTARY_B D6
 #define ROTARY_BUTTON D7
+
+// #define ROTARY_ENCODER_A_PIN D3
+// #define ROTARY_ENCODER_B_PIN D4
+// #define ROTARY_ENCODER_BUTTON_PIN D7
+// #define ROTARY_ENCODER_VCC_PIN -1 /*put -1 of Rotary encoder Vcc is connected directly to 3,3V; else you can use declared output pin for powering rotary encoder */
+
+#define BAR_LEFT 0
+#define BAR_RIGHT (127 - 7 - 1 - 7 - 1)
+#define BAR_TOP 26
+#define BAR_BOTTOM 31
+#define BAR_MIDDLE (((BAR_TOP - BAR_BOTTOM) / 2) + BAR_BOTTOM-1)
+#define BAR_WIDTH (BAR_RIGHT-BAR_LEFT+1)
+#define BAR_HEIGHT  (BAR_BOTTOM-BAR_TOP+1)
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -74,20 +96,26 @@ void sendPing();
 void watchdogReset();
 void watchdogExpire();
 
-void rotate(ESPRotary& r);
-void showDirection(ESPRotary& r);
-void handleRotate(ESPRotary& r);
-void showPosition(Button2& btn);
-void click(Button2& btn);
+// void rotate(ESPRotary& r);
+// void showDirection(ESPRotary& r);
+// void handleRotate(ESPRotary& r);
+// void showPosition(Button2& btn);
+// void click(Button2& btn);
+void rotary_loop(int16_t);
+void handleRotary();
 
-bool retry = true;
+void handleDisplay();
+void displayDrawCurrentMenu();
+void displayDrawCurrentValue();
+void displayDrawSummary();
+void drawMeter();
 
 uint8_t pendingStatusIn = 0;
 uint8_t pendingCommand = 0;
 uint8_t isConnected = 0;
 uint8_t pendingPongIn = 0;
 uint8_t pendingStatusOut = 0;
-uint8_t initialStatusGet = 5;
+uint8_t initialStatusGet = 3;
 
 uint32_t remoteTimestamp = 0L;
 
@@ -100,16 +128,15 @@ Ticker toggleActiveTicker;
 Ticker watchdogTicker;
 Ticker pingTicker;
 
-ESPRotary rotary = ESPRotary(ROTARY_A, ROTARY_B, 4);
+// ESPRotary rotary = ESPRotary(ROTARY_A, ROTARY_B, 4);
+Encoder rotary(ROTARY_A, ROTARY_B);
 Button2 button = Button2(ROTARY_BUTTON, INPUT_PULLUP, 20U);
+// AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN, ROTARY_ENCODER_BUTTON_PIN, ROTARY_ENCODER_VCC_PIN);
 
-// U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C(rotation, [reset [, clock, data]])
-// U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C(U8G2_R0, U8X8_PIN_NONE);
-// U8G2_SSD1306_128X32_UNIVISION_2_HW_I2C(U8G2_R0, U8X8_PIN_NONE, 4, 5);
-// U8G2_SH1106_128X64_NONAME_F_HW_I2C(U8G2_R0, U8X8_PIN_NONE, 4, 5);
-// U8G2_SSD1306_128X32_UNIVISION_1_HW_I2C(U8G2_R0);
+U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE, /* clock=*/ SCL, /* data=*/ SDA);   // pin remapping with ESP8266 HW I2C
 
-U8G2_SSD1306_128X32_UNIVISION_1_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE, /* clock=*/ SCL, /* data=*/ SDA);   // pin remapping with ESP8266 HW I2C
+uint8_t displayDirty = 1;
+
 void setup()
 {
   pinMode(STATUS_LED, OUTPUT);
@@ -139,12 +166,13 @@ void setup()
     // digitalWrite(STATUS_LED, LOW);
   }
 
-  rotary.setChangedHandler(handleRotate);
-  // rotary.setLeftRotationHandler(handleRotate);
-  // rotary.setRightRotationHandler(handleRotate);
+  // rotary.setChangedHandler(handleRotate);
 
-  button.setReleasedHandler(click);
-  // button.setLongClickHandler(resetPosition);
+  // button.setReleasedHandler(click);
+
+  //we must initialize rorary encoder 
+	// rotaryEncoder.begin();
+	// rotaryEncoder.setup([]{rotaryEncoder.readEncoder_ISR();});
 
   statusLocal.active             = DEFAULT_ACTIVE;
   statusLocal.program            = DEFAULT_PROGRAM;
@@ -154,28 +182,24 @@ void setup()
   statusLocal.maxbright          = DEFAULT_BRIGHT;
   statusLocal.step               = DEFAULT_STEP;
 
-  // reqStatusTicker.attach_ms(2000, requestStatus);
-  // toggleActiveTicker.attach_ms(876, toggleActiveAndSend);
-  pingTicker.attach_ms(1000, sendPing);
-
-  // Serial.println("setup/local");
-  // printState(statusLocal);
-  // Serial.println("setup/remote");
-  // printState(statusRemote);
+  pingTicker.attach_ms(598, sendPing);
 
   requestStatus();
 }
 
 void loop()
 {
+  handleRotary();
   handlePendingRecvStatus();
   handlePendingSendStatus();
   handlePong();
   handleMenu();
   handleCommand();
+  handleDisplay();
   
-  rotary.loop();
+  // rotary.loop();
   button.loop();
+	// rotary_loop();
 
   if (isConnected) {
     digitalWrite(STATUS_LED, HIGH);
@@ -237,6 +261,7 @@ void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
 
   digitalWrite(LED_BUILTIN, LOW);
   ledTicker.once_ms(8, flickLED);
+  // watchdogReset();
 }
 
 void flickLED() {
@@ -279,22 +304,8 @@ void handlePendingSendStatus() {
 void handlePendingRecvStatus() {
   // Copy the remote status to our local copy
   if (pendingStatusIn) {
-    // Serial.println("pendingStatusIn=1");
-
-      // Serial.println("handlePendingRecvStatus-1/local");
-      // printState(statusLocal);
-      // Serial.println("handlePendingRecvStatus-1/remote");
-      // printState(statusRemote);
-
     if (initialStatusGet) {
-      // Serial.println("initialStatusGet=1");
       memcpy(&statusLocal, &statusRemote, sizeof(statusLocal));
-
-      // Serial.println("handlePendingRecvStatus-1/local");
-      // printState(statusLocal);
-      // Serial.println("handlePendingRecvStatus-2/remote");
-      // printState(statusRemote);
-
       initialStatusGet--;
     }
     pendingStatusIn = 0;
@@ -303,8 +314,6 @@ void handlePendingRecvStatus() {
 
 void sendPing() {
   sendCommand(WLEDC_CMD_PING);
-  // Serial.println("Sending Ping");
-  // pendingPongIn = 1;
 }
 
 void handlePong() {
@@ -312,19 +321,20 @@ void handlePong() {
     pendingPongIn = 0;
     // Reset watchdog timer
     watchdogReset();
-    // Serial.println("Got Pong");
   }
 }
 
 void watchdogExpire() {
   // Serial.println("Watchdog Expired...");
   isConnected = 0;
+  displayDirty = 1;
 }
 
 void watchdogReset() {
   isConnected = 1;
+  displayDirty = 1;
   watchdogTicker.detach();
-  watchdogTicker.attach_ms_scheduled(1200, watchdogExpire);
+  watchdogTicker.attach_ms(1200, watchdogExpire);
 }
 
 void handleCommand() {
@@ -359,80 +369,96 @@ void handleCommand() {
       break;
     };
 
-    // Serial.println("handleCommand-1/remote");
-    // printState(statusRemote);
-
     // Copy status that was returned from the client
     memcpy(&statusRemote, &(commandBufferIn.stat), sizeof(commandBufferIn.stat));
-
-    // Serial.println("handleCommand-2/remote");
-    // printState(statusRemote);
-
 
     remoteTimestamp = commandBufferIn.timestamp;
 
     pendingCommand = 0;
+    // watchdogReset();
+
+    displayDirty = 1;
   }
 }
 
 // Encoder/Button
-void rotate(ESPRotary& r) {
-   Serial.println(r.getPosition());
+// void rotate(ESPRotary& r) {
+//    Serial.println(r.getPosition());
+// }
+
+// void showPosition(Button2& btn) {
+//   Serial.println(rotary.getPosition());
+// }
+
+// void click(Button2& btn) {
+//   // Serial.println("click\n");
+// }
+
+void handleRotary() {
+  static int16_t lastPos;
+  static int16_t d;
+  int16_t newPos = rotary.read() >> 2;
+  d = (newPos - lastPos);
+  lastPos = newPos;
+  rotary_loop(d);
 }
 
-void showPosition(Button2& btn) {
-  Serial.println(rotary.getPosition());
-}
+void rotary_loop(int16_t delta) {
+	//lets see if anything changed
+  int8_t dir = (delta>0)? 1 : -1;
+	
+	//optionally we can ignore whenever there is no change
+	if (delta == 0) return;
+	
 
-void click(Button2& btn) {
-  // Serial.println("click\n");
-}
-
-void handleRotate(ESPRotary& r) {
-  if (button.isPressed()) {
+	//first lets handle rotary encoder button click
+	if (button.isPressed()) {
+    displayDirty = 1;
     // Button is pressed
     // Change the current menuy
-    if (r.getDirection() == RE_LEFT) {
-      // Counter-clockwise
-      if (currentMenu==0) {
-        // At bottom, resstart to top
-        currentMenu = MENUCOUNT;
-      }
-      currentMenu--;
-    } else {
+    if (dir>0) {
+
       // Clockwise
       currentMenu++;
       if (currentMenu >= MENUCOUNT) {
         // At top
         currentMenu = 0;
       }
+    } else {
+      // Counter-clockwise
+      if (currentMenu==0) {
+        // At bottom, resstart to top
+        currentMenu = MENUCOUNT;
+      }
+      currentMenu--;
     }
-  } else {
+	} else {
+    // Change current value
     // Button is not pressed
     // Change the value of current menu item
     switch (currentMenu) {
       case 0: // Program
         switch (statusLocal.program) {
           case WLEDC_PRG_BLACK:
-          if (r.getDirection() == RE_LEFT)
+          if (dir<0)
             statusLocal.program = WLEDC_PRG_TWINKLE;
           else
             statusLocal.program = WLEDC_PRG_WHITE50;
           break;
           case WLEDC_PRG_WHITE50:
-          if (r.getDirection() == RE_LEFT)
+          if (dir<0)
             statusLocal.program = WLEDC_PRG_BLACK;
           else
             statusLocal.program = WLEDC_PRG_RAINBOW;
           break;
           case WLEDC_PRG_RAINBOW:
-          if (r.getDirection() == RE_LEFT)
+          if (dir<0)
             statusLocal.program = WLEDC_PRG_WHITE50;
           else
             statusLocal.program = WLEDC_PRG_TWINKLE;
           break;
           case WLEDC_PRG_TWINKLE:
-          if (r.getDirection() == RE_LEFT)
+          if (dir<0)
             statusLocal.program = WLEDC_PRG_RAINBOW;
           else
             statusLocal.program = WLEDC_PRG_BLACK;
@@ -440,37 +466,37 @@ void handleRotate(ESPRotary& r) {
         }
         break;
       case 1: // Speed
-        if (r.getDirection() == RE_LEFT)
-          statusLocal.speed--;
+        if (dir<0)
+          statusLocal.speed = max(statusLocal.speed + delta, WLEDC_MIN_SPEED);
         else
-          statusLocal.speed++;
+          statusLocal.speed = min(statusLocal.speed + delta, WLEDC_MAX_SPEED);
         break;
       case 2: // Width
-        if (r.getDirection() == RE_LEFT)
-          statusLocal.width--;
+        if (dir<0)
+          statusLocal.width = max(statusLocal.width + delta, WLEDC_MIN_WIDTH);
         else
-          statusLocal.width++;
+          statusLocal.width = min(statusLocal.width + delta , WLEDC_MAX_WIDTH);
         break;
-      case 3: // Count
-        if (r.getDirection() == RE_LEFT)
-          statusLocal.step--;
+      case 3: // Step
+        if (dir<0)
+          statusLocal.step = max(statusLocal.step + delta, WLEDC_MIN_STEP);
         else
-          statusLocal.step++;
+          statusLocal.step = min(statusLocal.step + delta, WLEDC_MAX_STEP);
         break;
       case 4: // Brightness
-        if (r.getDirection() == RE_LEFT)
-          statusLocal.maxbright--;
+        if (dir<0)
+          statusLocal.maxbright = max(statusLocal.maxbright + delta, WLEDC_MIN_BRIGHT);
         else
-          statusLocal.maxbright++;
+          statusLocal.maxbright = min(statusLocal.maxbright + delta, WLEDC_MAX_BRIGHT);
         break;
       case 5: // Refresh Period
-        if (r.getDirection() == RE_LEFT)
-          statusLocal.refresh_period_ms--;
+        if (dir<0)
+          statusLocal.refresh_period_ms = max(statusLocal.refresh_period_ms + delta, WLEDC_MIN_REFRESH);
         else
-          statusLocal.refresh_period_ms++;
+          statusLocal.refresh_period_ms = min(statusLocal.refresh_period_ms + delta, WLEDC_MAX_REFRESH);
         break;
       case 6: // Active
-        if (r.getDirection() == RE_LEFT)
+        if (dir<0)
           statusLocal.active = 0;
         else
           statusLocal.active = 1;
@@ -480,7 +506,104 @@ void handleRotate(ESPRotary& r) {
     pendingStatusOut = 1;
   }
   menuDirty = 1;
+  displayDirty = 1;
 }
+
+// void handleRotate(ESPRotary& r) {
+//   if (button.isPressed()) {
+//     displayDirty = 1;
+//     // Button is pressed
+//     // Change the current menuy
+//     if (r.getDirection() == RE_LEFT) {
+//       // Counter-clockwise
+//       if (currentMenu==0) {
+//         // At bottom, resstart to top
+//         currentMenu = MENUCOUNT;
+//       }
+//       currentMenu--;
+//     } else {
+//       // Clockwise
+//       currentMenu++;
+//       if (currentMenu >= MENUCOUNT) {
+//         // At top
+//         currentMenu = 0;
+//       }
+//     }
+//   } else {
+//     // Button is not pressed
+//     // Change the value of current menu item
+//     switch (currentMenu) {
+//       case 0: // Program
+//         switch (statusLocal.program) {
+//           case WLEDC_PRG_BLACK:
+//           if (r.getDirection() == RE_LEFT)
+//             statusLocal.program = WLEDC_PRG_TWINKLE;
+//           else
+//             statusLocal.program = WLEDC_PRG_WHITE50;
+//           break;
+//           case WLEDC_PRG_WHITE50:
+//           if (r.getDirection() == RE_LEFT)
+//             statusLocal.program = WLEDC_PRG_BLACK;
+//           else
+//             statusLocal.program = WLEDC_PRG_RAINBOW;
+//           break;
+//           case WLEDC_PRG_RAINBOW:
+//           if (r.getDirection() == RE_LEFT)
+//             statusLocal.program = WLEDC_PRG_WHITE50;
+//           else
+//             statusLocal.program = WLEDC_PRG_TWINKLE;
+//           break;
+//           case WLEDC_PRG_TWINKLE:
+//           if (r.getDirection() == RE_LEFT)
+//             statusLocal.program = WLEDC_PRG_RAINBOW;
+//           else
+//             statusLocal.program = WLEDC_PRG_BLACK;
+//           break;
+//         }
+//         break;
+//       case 1: // Speed
+//         if (r.getDirection() == RE_LEFT)
+//           statusLocal.speed = max(statusLocal.speed - 1, WLEDC_MIN_SPEED);
+//         else
+//           statusLocal.speed = min(statusLocal.speed + 1, WLEDC_MAX_SPEED);
+//         break;
+//       case 2: // Width
+//         if (r.getDirection() == RE_LEFT)
+//           statusLocal.width = max(statusLocal.width - 1, WLEDC_MIN_WIDTH);
+//         else
+//           statusLocal.width = min(statusLocal.width + 1 , WLEDC_MAX_WIDTH);
+//         break;
+//       case 3: // Step
+//         if (r.getDirection() == RE_LEFT)
+//           statusLocal.step = max(statusLocal.step - 1, WLEDC_MIN_STEP);
+//         else
+//           statusLocal.step = min(statusLocal.step + 1, WLEDC_MAX_STEP);
+//         break;
+//       case 4: // Brightness
+//         if (r.getDirection() == RE_LEFT)
+//           statusLocal.maxbright = max(statusLocal.maxbright - 1, WLEDC_MIN_BRIGHT);
+//         else
+//           statusLocal.maxbright = min(statusLocal.maxbright + 1, WLEDC_MAX_BRIGHT);
+//         break;
+//       case 5: // Refresh Period
+//         if (r.getDirection() == RE_LEFT)
+//           statusLocal.refresh_period_ms = max(statusLocal.refresh_period_ms - 1, WLEDC_MIN_REFRESH);
+//         else
+//           statusLocal.refresh_period_ms = min(statusLocal.refresh_period_ms + 1, WLEDC_MAX_REFRESH);
+//         break;
+//       case 6: // Active
+//         if (r.getDirection() == RE_LEFT)
+//           statusLocal.active = 0;
+//         else
+//           statusLocal.active = 1;
+//         break;
+//     }
+
+//     pendingStatusOut = 1;
+//   }
+//   menuDirty = 1;
+//   displayDirty = 1;
+// }
 
 void handleMenu() {
   if (menuDirty) {
@@ -550,4 +673,131 @@ void printState(status_t state) {
   Serial.print(" S:");
   Serial.print(state.speed);
   Serial.println();
+}
+
+void handleDisplay() {
+  if (displayDirty) {
+    u8g2.clearBuffer();
+
+    // u8g2.drawStr(0, 32, statusLocal.refresh_period_ms);
+    displayDrawCurrentMenu();
+    displayDrawSummary();
+    displayDrawCurrentValue();
+
+    u8g2.sendBuffer();
+
+    displayDirty = 0;
+  }
+}
+
+void displayDrawCurrentMenu() {
+  u8g2.setFont(u8g2_font_7x13_t_symbols);
+  u8g2.setDrawColor(1);
+  u8g2.drawStr(0, 13, menuTitles[currentMenu]);
+}
+
+void displayDrawCurrentValue() {
+  drawMeter();
+}
+
+void drawMeter() {
+  uint8_t barLength;
+  char value[6];
+  switch (currentMenu) {
+    case 0:  // Program
+      // Do not draw bar, draw name of current program
+      u8g2.setFont(u8g2_font_7x13_t_symbols);
+      u8g2.setDrawColor(1);
+      u8g2.drawStr(BAR_LEFT, BAR_BOTTOM, programNames[statusLocal.program]);
+      break;
+    case 1:  // Speed
+      u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
+      // Top bar, local status
+      barLength = map(statusLocal.speed, WLEDC_MIN_SPEED, WLEDC_MAX_SPEED, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_TOP+1, barLength, BAR_MIDDLE-BAR_TOP);
+      // Bottom Bar, remote status
+      barLength = map(statusRemote.speed, WLEDC_MIN_SPEED, WLEDC_MAX_SPEED, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_MIDDLE+1, barLength, BAR_BOTTOM-BAR_MIDDLE);
+      u8g2.setFont(u8g2_font_7x13_t_symbols);
+      u8g2.setDrawColor(1);
+      itoa(statusLocal.speed, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.drawStr((127-barLength), 9, value);
+      break;
+    case 2:  // Width
+      u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
+      // Top bar, local status
+      barLength = map(statusLocal.width, WLEDC_MIN_WIDTH, WLEDC_MAX_WIDTH, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_TOP+1, barLength, BAR_MIDDLE-BAR_TOP);
+      // Bottom Bar, remote status
+      barLength = map(statusRemote.width, WLEDC_MIN_WIDTH, WLEDC_MAX_WIDTH, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_MIDDLE+1, barLength, BAR_BOTTOM-BAR_MIDDLE);
+      u8g2.setFont(u8g2_font_7x13_t_symbols);
+      u8g2.setDrawColor(1);
+      itoa(statusLocal.width, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.drawStr((127-barLength), 9, value);
+      break;
+    case 3:  // Step
+      u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
+      // Top bar, local status
+      barLength = map(statusLocal.step, WLEDC_MIN_STEP, WLEDC_MAX_STEP, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_TOP+1, barLength, BAR_MIDDLE-BAR_TOP);
+      // Bottom Bar, remote status
+      barLength = map(statusRemote.step, WLEDC_MIN_STEP, WLEDC_MAX_STEP, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_MIDDLE+1, barLength, BAR_BOTTOM-BAR_MIDDLE);
+      u8g2.setFont(u8g2_font_7x13_t_symbols);
+      u8g2.setDrawColor(1);
+      itoa(statusLocal.step, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.drawStr((127-barLength), 9, value);
+      break;
+    case 4:  // Brightness
+      u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
+      // Top bar, local status
+      barLength = map(statusLocal.maxbright, WLEDC_MIN_BRIGHT, WLEDC_MAX_BRIGHT, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_TOP+1, barLength, BAR_MIDDLE-BAR_TOP);
+      // Bottom Bar, remote status
+      barLength = map(statusRemote.maxbright, WLEDC_MIN_BRIGHT, WLEDC_MAX_BRIGHT, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_MIDDLE+1, barLength, BAR_BOTTOM-BAR_MIDDLE);
+      u8g2.setFont(u8g2_font_7x13_t_symbols);
+      u8g2.setDrawColor(1);
+      itoa(statusLocal.maxbright, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.drawStr((127-barLength), 9, value);
+      break;
+    case 5:  // Refresh Period
+      u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
+      // Top bar, local status
+      barLength = map(statusLocal.refresh_period_ms, WLEDC_MIN_REFRESH, WLEDC_MAX_REFRESH, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_TOP+1, barLength, BAR_MIDDLE-BAR_TOP);
+      // Bottom Bar, remote status
+      barLength = map(statusRemote.refresh_period_ms, WLEDC_MIN_REFRESH, WLEDC_MAX_REFRESH, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_MIDDLE+1, barLength, BAR_BOTTOM-BAR_MIDDLE);
+      u8g2.setFont(u8g2_font_7x13_t_symbols);
+      u8g2.setDrawColor(1);
+      itoa(statusLocal.refresh_period_ms, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.drawStr((127-barLength), 9, value);
+      break;
+    case 6:  // Active
+      // Do not draw bar, draw ACTIVE/INACTIVE
+      break;
+  }
+}
+
+void displayDrawSummary() {
+  // //Other marks
+  u8g2.setFont(u8g2_font_7x13_t_symbols);
+  u8g2.setDrawColor(1);
+  if (isConnected) {
+    // u8g2.drawStr(113, 14, (char *)0x71);
+    u8g2.drawGlyph((127-6), (33), 0x25cf);
+  } else {
+    // u8g2.drawStr(113, 14, (char *)0x70);
+    u8g2.drawGlyph((127-6), (33), 0x25cb);
+  }
+  if (statusLocal.active) {
+    u8g2.drawGlyph((127-6-6-1), (33), 0x2600);
+  }
 }

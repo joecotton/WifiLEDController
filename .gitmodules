@@ -1,6 +1,3 @@
 [submodule "WifiLEDController-Slave/lib/FastLED"]
 	path = WifiLEDController-Slave/lib/FastLED
 	url = https://github.com/coryking/FastLED.git
-[submodule "WifiLEDController-Master/lib/ESPRotary"]
-	path = WifiLEDController-Master/lib/ESPRotary
-	url = https://github.com/LennartHennigs/ESPRotary.git

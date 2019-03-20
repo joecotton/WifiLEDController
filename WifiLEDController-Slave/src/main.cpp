@@ -225,6 +225,7 @@ void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
     }
     digitalWrite(LED_BUILTIN, LOW);
     ledTicker.once_ms(8, flickLED);
+    // watchdogReset();
   }
 }
 
@@ -308,6 +309,7 @@ void handleCommand() {
     printState(statusActive);
 
     pendingCommand = 0;
+    // watchdogReset();
   }
 }
 
