@@ -1,8 +1,6 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <Ticker.h>
-// #include <ESPRotary.h>
-// #include "AiEsp32RotaryEncoder.h"
 #include <Button2.h>
 #include <Encoder.h>
 #include <U8g2lib.h>
@@ -58,11 +56,6 @@ uint8_t mac[]       = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 #define ROTARY_B D6
 #define ROTARY_BUTTON D7
 
-// #define ROTARY_ENCODER_A_PIN D3
-// #define ROTARY_ENCODER_B_PIN D4
-// #define ROTARY_ENCODER_BUTTON_PIN D7
-// #define ROTARY_ENCODER_VCC_PIN -1 /*put -1 of Rotary encoder Vcc is connected directly to 3,3V; else you can use declared output pin for powering rotary encoder */
-
 #define BAR_LEFT 0
 #define BAR_RIGHT (127 - 7 - 1 - 7 - 1)
 #define BAR_TOP 26
@@ -96,10 +89,6 @@ void sendPing();
 void watchdogReset();
 void watchdogExpire();
 
-// void rotate(ESPRotary& r);
-// void showDirection(ESPRotary& r);
-// void handleRotate(ESPRotary& r);
-// void showPosition(Button2& btn);
 // void click(Button2& btn);
 void rotary_loop(int16_t);
 void handleRotary();
@@ -128,10 +117,8 @@ Ticker toggleActiveTicker;
 Ticker watchdogTicker;
 Ticker pingTicker;
 
-// ESPRotary rotary = ESPRotary(ROTARY_A, ROTARY_B, 4);
 Encoder rotary(ROTARY_A, ROTARY_B);
 Button2 button = Button2(ROTARY_BUTTON, INPUT_PULLUP, 20U);
-// AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN, ROTARY_ENCODER_BUTTON_PIN, ROTARY_ENCODER_VCC_PIN);
 
 U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE, /* clock=*/ SCL, /* data=*/ SDA);   // pin remapping with ESP8266 HW I2C
 
@@ -166,13 +153,7 @@ void setup()
     // digitalWrite(STATUS_LED, LOW);
   }
 
-  // rotary.setChangedHandler(handleRotate);
-
   // button.setReleasedHandler(click);
-
-  //we must initialize rorary encoder 
-	// rotaryEncoder.begin();
-	// rotaryEncoder.setup([]{rotaryEncoder.readEncoder_ISR();});
 
   statusLocal.active             = DEFAULT_ACTIVE;
   statusLocal.program            = DEFAULT_PROGRAM;
@@ -381,15 +362,6 @@ void handleCommand() {
   }
 }
 
-// Encoder/Button
-// void rotate(ESPRotary& r) {
-//    Serial.println(r.getPosition());
-// }
-
-// void showPosition(Button2& btn) {
-//   Serial.println(rotary.getPosition());
-// }
-
 // void click(Button2& btn) {
 //   // Serial.println("click\n");
 // }
@@ -508,102 +480,6 @@ void rotary_loop(int16_t delta) {
   menuDirty = 1;
   displayDirty = 1;
 }
-
-// void handleRotate(ESPRotary& r) {
-//   if (button.isPressed()) {
-//     displayDirty = 1;
-//     // Button is pressed
-//     // Change the current menuy
-//     if (r.getDirection() == RE_LEFT) {
-//       // Counter-clockwise
-//       if (currentMenu==0) {
-//         // At bottom, resstart to top
-//         currentMenu = MENUCOUNT;
-//       }
-//       currentMenu--;
-//     } else {
-//       // Clockwise
-//       currentMenu++;
-//       if (currentMenu >= MENUCOUNT) {
-//         // At top
-//         currentMenu = 0;
-//       }
-//     }
-//   } else {
-//     // Button is not pressed
-//     // Change the value of current menu item
-//     switch (currentMenu) {
-//       case 0: // Program
-//         switch (statusLocal.program) {
-//           case WLEDC_PRG_BLACK:
-//           if (r.getDirection() == RE_LEFT)
-//             statusLocal.program = WLEDC_PRG_TWINKLE;
-//           else
-//             statusLocal.program = WLEDC_PRG_WHITE50;
-//           break;
-//           case WLEDC_PRG_WHITE50:
-//           if (r.getDirection() == RE_LEFT)
-//             statusLocal.program = WLEDC_PRG_BLACK;
-//           else
-//             statusLocal.program = WLEDC_PRG_RAINBOW;
-//           break;
-//           case WLEDC_PRG_RAINBOW:
-//           if (r.getDirection() == RE_LEFT)
-//             statusLocal.program = WLEDC_PRG_WHITE50;
-//           else
-//             statusLocal.program = WLEDC_PRG_TWINKLE;
-//           break;
-//           case WLEDC_PRG_TWINKLE:
-//           if (r.getDirection() == RE_LEFT)
-//             statusLocal.program = WLEDC_PRG_RAINBOW;
-//           else
-//             statusLocal.program = WLEDC_PRG_BLACK;
-//           break;
-//         }
-//         break;
-//       case 1: // Speed
-//         if (r.getDirection() == RE_LEFT)
-//           statusLocal.speed = max(statusLocal.speed - 1, WLEDC_MIN_SPEED);
-//         else
-//           statusLocal.speed = min(statusLocal.speed + 1, WLEDC_MAX_SPEED);
-//         break;
-//       case 2: // Width
-//         if (r.getDirection() == RE_LEFT)
-//           statusLocal.width = max(statusLocal.width - 1, WLEDC_MIN_WIDTH);
-//         else
-//           statusLocal.width = min(statusLocal.width + 1 , WLEDC_MAX_WIDTH);
-//         break;
-//       case 3: // Step
-//         if (r.getDirection() == RE_LEFT)
-//           statusLocal.step = max(statusLocal.step - 1, WLEDC_MIN_STEP);
-//         else
-//           statusLocal.step = min(statusLocal.step + 1, WLEDC_MAX_STEP);
-//         break;
-//       case 4: // Brightness
-//         if (r.getDirection() == RE_LEFT)
-//           statusLocal.maxbright = max(statusLocal.maxbright - 1, WLEDC_MIN_BRIGHT);
-//         else
-//           statusLocal.maxbright = min(statusLocal.maxbright + 1, WLEDC_MAX_BRIGHT);
-//         break;
-//       case 5: // Refresh Period
-//         if (r.getDirection() == RE_LEFT)
-//           statusLocal.refresh_period_ms = max(statusLocal.refresh_period_ms - 1, WLEDC_MIN_REFRESH);
-//         else
-//           statusLocal.refresh_period_ms = min(statusLocal.refresh_period_ms + 1, WLEDC_MAX_REFRESH);
-//         break;
-//       case 6: // Active
-//         if (r.getDirection() == RE_LEFT)
-//           statusLocal.active = 0;
-//         else
-//           statusLocal.active = 1;
-//         break;
-//     }
-
-//     pendingStatusOut = 1;
-//   }
-//   menuDirty = 1;
-//   displayDirty = 1;
-// }
 
 void handleMenu() {
   if (menuDirty) {
