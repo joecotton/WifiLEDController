@@ -99,11 +99,12 @@ void displayDrawCurrentValue();
 void displayDrawSummary();
 void drawMeter();
 
-uint8_t pendingStatusIn = 0;
-uint8_t pendingCommand = 0;
+uint8_t volatile pendingStatusIn = 0;
+uint8_t volatile pendingCommand = 0;
+uint8_t volatile pendingCommandSending = 0;
 uint8_t isConnected = 0;
 uint8_t pendingPongIn = 0;
-uint8_t pendingStatusOut = 0;
+uint8_t volatile pendingStatusOut = 0;
 uint8_t initialStatusGet = 3;
 
 uint32_t remoteTimestamp = 0L;
@@ -226,6 +227,7 @@ void InitESPNow() {
 void onDataSent(uint8_t* macaddr, uint8_t status) {
   digitalWrite(LED_BUILTIN, LOW);
   ledTicker.once_ms(80, flickLED);
+  pendingCommandSending = 0;
   // Serial.println("Data sent successfully");
 }
 
@@ -261,15 +263,17 @@ void requestStatus() {
 
 void sendCommand(command_type_t command) {
   // Serial.println("Sending requested Status");
-  commandBufferOut.cmd=command;
-  commandBufferOut.timestamp=millis();
-  memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
+  if (!pendingCommandSending) {
+    commandBufferOut.cmd=command;
+    commandBufferOut.timestamp=millis();
+    memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
 
-  if (command == WLEDC_CMD_GETSTATUS || command == WLEDC_CMD_PING) {
-    pendingStatusIn = 1;
+    if (command == WLEDC_CMD_GETSTATUS || command == WLEDC_CMD_PING) {
+      pendingStatusIn = 1;
+    }
+
+    esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
   }
-
-  esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
 }
 
 void handlePendingSendStatus() {
