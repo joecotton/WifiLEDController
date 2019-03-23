@@ -41,7 +41,7 @@ void initVariant()
 #define CHANNEL 1
 #define STATUS_LED D1
 #define WSPIN 3
-// #define WSPIN D8
+// #define WSPIN D5
 #define WSLEDS 100
 
 void printMacAddress(uint8_t* macaddr);
@@ -580,7 +580,7 @@ void disablePrgTwinkle() {
 
 void makeTwinkle() {
   // Pick random LED, and random time to twinkle it.
-  if (random16()<statusActive.step) {
+  if (random8()<statusActive.step) {
     leds[random16(WSLEDS-1)] = CHSV(statusActive.hue, statusActive.saturation, 0xFF);
   }
 }

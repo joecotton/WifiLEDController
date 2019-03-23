@@ -14,23 +14,26 @@ extern "C"
 #include "../../common/wifiledcontroller.h"
 
 char* menuTitles[] = {
-  "Program",        // 0
-  "Speed",          // 1
-  "Width",          // 2
-  "Step",           // 3
-  "Brightness",     // 4
-  "Update Speed",   // 5
-  "Active"          // 6
+  "Program",       // 0
+  "Speed",         // 1
+  "Width",         // 2
+  "Step",          // 3
+  "Hue",           // 4
+  "Saturation",    // 5
+  "Brightness",    // 6
+  "Update Speed",  // 7
+  "Active"         // 8
 };
 
 char* programNames[] = {
   "Black",          // 0
   "White 50%",      // 1
   "Rainbow",        // 2
-  "Twinkle"         // 3
+  "Twinkle",        // 3
+  "Waves"           // 4
 };
 
-const uint8_t MENUCOUNT = 7;
+const uint8_t MENUCOUNT = 9;
 uint8_t currentMenu = 0;
 uint8_t menuDirty = 1;
 
@@ -107,7 +110,7 @@ uint8_t pendingPongIn = 0;
 uint8_t volatile pendingStatusOut = 0;
 uint8_t initialStatusGet = 3;
 
-uint32_t remoteTimestamp = 0L;
+// uint32_t remoteTimestamp = 0L;
 
 uint32_t position = 0;
 uint8_t buttonState = 0;
@@ -160,6 +163,8 @@ void setup()
   statusLocal.program            = DEFAULT_PROGRAM;
   statusLocal.speed              = DEFAULT_SPEED;
   statusLocal.width              = DEFAULT_WIDTH;
+  statusLocal.hue                = DEFAULT_HUE;
+  statusLocal.saturation         = DEFAULT_SATURATION;
   statusLocal.refresh_period_ms  = DEFAULT_REFRESH;
   statusLocal.maxbright          = DEFAULT_BRIGHT;
   statusLocal.step               = DEFAULT_STEP;
@@ -265,7 +270,7 @@ void sendCommand(command_type_t command) {
   // Serial.println("Sending requested Status");
   if (!pendingCommandSending) {
     commandBufferOut.cmd=command;
-    commandBufferOut.timestamp=millis();
+    // commandBufferOut.timestamp=millis();
     memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
 
     if (command == WLEDC_CMD_GETSTATUS || command == WLEDC_CMD_PING) {
@@ -357,7 +362,7 @@ void handleCommand() {
     // Copy status that was returned from the client
     memcpy(&statusRemote, &(commandBufferIn.stat), sizeof(commandBufferIn.stat));
 
-    remoteTimestamp = commandBufferIn.timestamp;
+    // remoteTimestamp = commandBufferIn.timestamp;
 
     pendingCommand = 0;
     // watchdogReset();
@@ -437,6 +442,12 @@ void rotary_loop(int16_t delta) {
           if (dir<0)
             statusLocal.program = WLEDC_PRG_RAINBOW;
           else
+            statusLocal.program = WLEDC_PRG_WAVES;
+          break;
+          case WLEDC_PRG_WAVES:
+          if (dir<0)
+            statusLocal.program = WLEDC_PRG_TWINKLE;
+          else
             statusLocal.program = WLEDC_PRG_BLACK;
           break;
         }
@@ -453,25 +464,37 @@ void rotary_loop(int16_t delta) {
         else
           statusLocal.width = min(statusLocal.width + delta , WLEDC_MAX_WIDTH);
         break;
-      case 3: // Step
-        if (dir<0)
+      case 3:  // Step
+        if (dir < 0)
           statusLocal.step = max(statusLocal.step + delta, WLEDC_MIN_STEP);
         else
           statusLocal.step = min(statusLocal.step + delta, WLEDC_MAX_STEP);
         break;
-      case 4: // Brightness
+      case 4:  // Hue
+        if (dir<0)
+          statusLocal.hue = max(statusLocal.hue + delta, WLEDC_MIN_HUE);
+        else
+          statusLocal.hue = min(statusLocal.hue + delta, WLEDC_MAX_HUE);
+        break;
+      case 5: // Saturation
+        if (dir<0)
+          statusLocal.saturation = max(statusLocal.saturation + delta, WLEDC_MIN_SATURATION);
+        else
+          statusLocal.saturation = min(statusLocal.saturation + delta, WLEDC_MAX_SATURATION);
+        break;
+      case 6: // Brightness
         if (dir<0)
           statusLocal.maxbright = max(statusLocal.maxbright + delta, WLEDC_MIN_BRIGHT);
         else
           statusLocal.maxbright = min(statusLocal.maxbright + delta, WLEDC_MAX_BRIGHT);
         break;
-      case 5: // Refresh Period
+      case 7: // Refresh Period
         if (dir<0)
           statusLocal.refresh_period_ms = max(statusLocal.refresh_period_ms + delta, WLEDC_MIN_REFRESH);
         else
           statusLocal.refresh_period_ms = min(statusLocal.refresh_period_ms + delta, WLEDC_MAX_REFRESH);
         break;
-      case 6: // Active
+      case 8: // Active
         if (dir<0)
           statusLocal.active = 0;
         else
@@ -516,22 +539,32 @@ void printStatusValue(uint8_t selected) {
       Serial.print("/");
       Serial.print(statusRemote.width);
       break;
-    case 3: // Count
+    case 3:  // Step
       Serial.print(statusLocal.step);
       Serial.print("/");
       Serial.print(statusRemote.step);
       break;
-    case 4: // Brightness
+    case 4:  // Hue
+      Serial.print(statusLocal.hue);
+      Serial.print("/");
+      Serial.print(statusRemote.hue);
+      break;
+    case 5: // Saturation
+      Serial.print(statusLocal.saturation);
+      Serial.print("/");
+      Serial.print(statusRemote.saturation);
+      break;
+    case 6: // Brightness
       Serial.print(statusLocal.maxbright);
       Serial.print("/");
       Serial.print(statusRemote.maxbright);
       break;
-    case 5: // Refresh Period
+    case 7: // Refresh Period
       Serial.print(statusLocal.refresh_period_ms);
       Serial.print("/");
       Serial.print(statusRemote.refresh_period_ms);
       break;
-    case 6: // Active
+    case 8: // Active
       Serial.print(statusLocal.active);
       Serial.print("/");
       Serial.print(statusRemote.active);
@@ -546,6 +579,10 @@ void printState(status_t state) {
   Serial.print(state.active);
   Serial.print(" W:");
   Serial.print(state.width);
+  Serial.print(" H:");
+  Serial.print(state.hue);
+  Serial.print(" T:");
+  Serial.print(state.saturation);
   Serial.print(" C:");
   Serial.print(state.step);
   Serial.print(" B:");
@@ -588,7 +625,8 @@ void drawMeter() {
       // Do not draw bar, draw name of current program
       u8g2.setFont(u8g2_font_7x13_t_symbols);
       u8g2.setDrawColor(1);
-      u8g2.drawStr(BAR_LEFT, BAR_BOTTOM, programNames[statusLocal.program]);
+      u8g2.setCursor(BAR_LEFT, BAR_BOTTOM);
+      u8g2.print(programNames[statusLocal.program]);
       break;
     case 1:  // Speed
       u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
@@ -598,11 +636,18 @@ void drawMeter() {
       // Bottom Bar, remote status
       barLength = map(statusRemote.speed, WLEDC_MIN_SPEED, WLEDC_MAX_SPEED, 0, BAR_WIDTH-2);
       u8g2.drawBox(BAR_LEFT+1, BAR_MIDDLE+1, barLength, BAR_BOTTOM-BAR_MIDDLE);
+      // Values; Local/Remote
       u8g2.setFont(u8g2_font_7x13_t_symbols);
       u8g2.setDrawColor(1);
       itoa(statusLocal.speed, value, 10);
       barLength = u8g2.getStrWidth(value);
-      u8g2.drawStr((127-barLength), 9, value);
+      u8g2.setCursor((120 - barLength), 9);
+      u8g2.print(value);
+      u8g2.print(F("L"));
+      itoa(statusRemote.speed, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.setCursor((120 - barLength), 20);
+      u8g2.print(value);
       break;
     case 2:  // Width
       u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
@@ -616,23 +661,82 @@ void drawMeter() {
       u8g2.setDrawColor(1);
       itoa(statusLocal.width, value, 10);
       barLength = u8g2.getStrWidth(value);
-      u8g2.drawStr((127-barLength), 9, value);
+      u8g2.setCursor((120 - barLength), 9);
+      u8g2.print(value);
+      u8g2.print(F("L"));
+      itoa(statusRemote.width, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.setCursor((120 - barLength), 20);
+      u8g2.print(value);
+      u8g2.print(F("R"));
       break;
     case 3:  // Step
       u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
       // Top bar, local status
-      barLength = map(statusLocal.step, WLEDC_MIN_STEP, WLEDC_MAX_STEP, 0, BAR_WIDTH-2);
-      u8g2.drawBox(BAR_LEFT+1, BAR_TOP+1, barLength, BAR_MIDDLE-BAR_TOP);
+      barLength = map(statusLocal.step, WLEDC_MIN_STEP, WLEDC_MAX_STEP, 0,
+                      BAR_WIDTH - 2);
+      u8g2.drawBox(BAR_LEFT + 1, BAR_TOP + 1, barLength, BAR_MIDDLE - BAR_TOP);
       // Bottom Bar, remote status
-      barLength = map(statusRemote.step, WLEDC_MIN_STEP, WLEDC_MAX_STEP, 0, BAR_WIDTH-2);
-      u8g2.drawBox(BAR_LEFT+1, BAR_MIDDLE+1, barLength, BAR_BOTTOM-BAR_MIDDLE);
+      barLength = map(statusRemote.step, WLEDC_MIN_STEP, WLEDC_MAX_STEP, 0,
+                      BAR_WIDTH - 2);
+      u8g2.drawBox(BAR_LEFT + 1, BAR_MIDDLE + 1, barLength,
+                   BAR_BOTTOM - BAR_MIDDLE);
       u8g2.setFont(u8g2_font_7x13_t_symbols);
       u8g2.setDrawColor(1);
       itoa(statusLocal.step, value, 10);
       barLength = u8g2.getStrWidth(value);
-      u8g2.drawStr((127-barLength), 9, value);
+      u8g2.setCursor((120 - barLength), 9);
+      u8g2.print(value);
+      u8g2.print(F("L"));
+      itoa(statusRemote.step, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.setCursor((120 - barLength), 20);
+      u8g2.print(value);
+      u8g2.print(F("R"));
       break;
-    case 4:  // Brightness
+    case 4:  // Hue
+      u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
+      // Top bar, local status
+      barLength = map(statusLocal.hue, WLEDC_MIN_HUE, WLEDC_MAX_HUE, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_TOP+1, barLength, BAR_MIDDLE-BAR_TOP);
+      // Bottom Bar, remote status
+      barLength = map(statusRemote.hue, WLEDC_MIN_HUE, WLEDC_MAX_HUE, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_MIDDLE+1, barLength, BAR_BOTTOM-BAR_MIDDLE);
+      u8g2.setFont(u8g2_font_7x13_t_symbols);
+      u8g2.setDrawColor(1);
+      itoa(statusLocal.hue, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.setCursor((120 - barLength), 9);
+      u8g2.print(value);
+      u8g2.print(F("L"));
+      itoa(statusRemote.hue, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.setCursor((120 - barLength), 20);
+      u8g2.print(value);
+      u8g2.print(F("R"));
+      break;
+    case 5:  // Saturation
+      u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
+      // Top bar, local status
+      barLength = map(statusLocal.saturation, WLEDC_MIN_SATURATION, WLEDC_MAX_SATURATION, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_TOP+1, barLength, BAR_MIDDLE-BAR_TOP);
+      // Bottom Bar, remote status
+      barLength = map(statusRemote.saturation, WLEDC_MIN_SATURATION, WLEDC_MAX_SATURATION, 0, BAR_WIDTH-2);
+      u8g2.drawBox(BAR_LEFT+1, BAR_MIDDLE+1, barLength, BAR_BOTTOM-BAR_MIDDLE);
+      u8g2.setFont(u8g2_font_7x13_t_symbols);
+      u8g2.setDrawColor(1);
+      itoa(statusLocal.saturation, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.setCursor((120 - barLength), 9);
+      u8g2.print(value);
+      u8g2.print(F("L"));
+      itoa(statusRemote.saturation, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.setCursor((120 - barLength), 20);
+      u8g2.print(value);
+      u8g2.print(F("R"));
+      break;
+    case 6:  // Brightness
       u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
       // Top bar, local status
       barLength = map(statusLocal.maxbright, WLEDC_MIN_BRIGHT, WLEDC_MAX_BRIGHT, 0, BAR_WIDTH-2);
@@ -644,9 +748,16 @@ void drawMeter() {
       u8g2.setDrawColor(1);
       itoa(statusLocal.maxbright, value, 10);
       barLength = u8g2.getStrWidth(value);
-      u8g2.drawStr((127-barLength), 9, value);
+      u8g2.setCursor((120 - barLength), 9);
+      u8g2.print(value);
+      u8g2.print(F("L"));
+      itoa(statusRemote.maxbright, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.setCursor((120 - barLength), 20);
+      u8g2.print(value);
+      u8g2.print(F("R"));
       break;
-    case 5:  // Refresh Period
+    case 7:  // Refresh Period
       u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
       // Top bar, local status
       barLength = map(statusLocal.refresh_period_ms, WLEDC_MIN_REFRESH, WLEDC_MAX_REFRESH, 0, BAR_WIDTH-2);
@@ -658,10 +769,31 @@ void drawMeter() {
       u8g2.setDrawColor(1);
       itoa(statusLocal.refresh_period_ms, value, 10);
       barLength = u8g2.getStrWidth(value);
-      u8g2.drawStr((127-barLength), 9, value);
+      u8g2.setCursor((120 - barLength), 9);
+      u8g2.print(value);
+      u8g2.print(F("L"));
+      itoa(statusRemote.refresh_period_ms, value, 10);
+      barLength = u8g2.getStrWidth(value);
+      u8g2.setCursor((120 - barLength), 20);
+      u8g2.print(value);
+      u8g2.print(F("R"));
       break;
-    case 6:  // Active
+    case 8:  // Active
       // Do not draw bar, draw ACTIVE/INACTIVE
+      u8g2.setFont(u8g2_font_7x13_t_symbols);
+      u8g2.setDrawColor(1);
+      u8g2.setCursor(0, 31);
+      if (statusLocal.active) {
+        u8g2.print(F("ON"));
+      } else {
+        u8g2.print(F("OFF"));
+      }
+      u8g2.setCursor(50, 31);
+      if (statusRemote.active) {
+        u8g2.print(F("/ ON"));
+      } else {
+        u8g2.print(F("/ OFF"));
+      }
       break;
   }
 }

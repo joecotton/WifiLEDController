@@ -54,7 +54,7 @@ struct __attribute__((packed)) command_t
 #define DEFAULT_SPEED 20
 #define DEFAULT_WIDTH 1
 #define DEFAULT_HUE 0
-#define DEFAULT_SATURATION 255
+#define DEFAULT_SATURATION 0
 #define DEFAULT_STEP 2
 #define DEFAULT_BRIGHT 32
 #define DEFAULT_PROGRAM WLEDC_PRG_BLACK
