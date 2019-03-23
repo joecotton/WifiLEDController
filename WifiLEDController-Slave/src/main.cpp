@@ -75,6 +75,8 @@ void handleActive();
 void handleSpeed();
 void handleProgram();
 void handleWidth();
+void handleHue();
+void handleSaturation();
 void handleRefresh();
 void handleMaxBright();
 void handleCount();
@@ -83,6 +85,8 @@ void updateProgram();
 void updateActive();
 void updateSpeed();
 void updateWidth();
+void updateHue();
+void updateSaturation();
 void updateRefresh();
 void updateMaxBright();
 void updateCount();
@@ -104,12 +108,19 @@ Ticker rainbowTicker;
 
 void enablePrgTwinkle();
 void disablePrgTwinkle();
+void makeTwinkle();
+void twinkleFade();
+Ticker twinkleTicker;
+Ticker twinkleFadeTicker;
+
+void enablePrgWaves();
+void disablePrgWaves();
 
 void disableAllPrg();
 
 uint8_t pendingPongOut = 0;
 uint8_t isConnected = 0;
-uint32_t remoteTimestamp = 0L;
+// uint32_t remoteTimestamp = 0L;
 
 Ticker ledTicker;
 Ticker watchdogTicker;
@@ -130,6 +141,8 @@ void setup()
   statusActive.program           = DEFAULT_PROGRAM;
   statusActive.speed             = DEFAULT_SPEED;
   statusActive.width             = DEFAULT_WIDTH;
+  statusActive.hue               = DEFAULT_HUE;
+  statusActive.saturation        = DEFAULT_SATURATION;
   statusActive.refresh_period_ms = DEFAULT_REFRESH;
   statusActive.maxbright         = DEFAULT_BRIGHT;
   statusActive.step              = DEFAULT_STEP;
@@ -138,6 +151,8 @@ void setup()
   statusLocal.program            = DEFAULT_PROGRAM;
   statusLocal.speed              = DEFAULT_SPEED;
   statusLocal.width              = DEFAULT_WIDTH;
+  statusLocal.hue                = DEFAULT_HUE;
+  statusLocal.saturation         = DEFAULT_SATURATION;
   statusLocal.refresh_period_ms  = DEFAULT_REFRESH;
   statusLocal.maxbright          = DEFAULT_BRIGHT;
   statusLocal.step               = DEFAULT_STEP;
@@ -271,7 +286,7 @@ void watchdogReset() {
 void handleCommand() {
   if (pendingCommand) {
 
-    remoteTimestamp = commandBufferIn.timestamp;
+    // remoteTimestamp = commandBufferIn.timestamp;
 
     switch (commandBufferIn.cmd) {
       case WLEDC_CMD_NULL:
@@ -319,6 +334,8 @@ void handleStatus() {
     handleProgram();
     handleSpeed();
     handleWidth();
+    handleHue();
+    handleSaturation();
     handleMaxBright();
     handleRefresh();
     handleCount();
@@ -352,6 +369,20 @@ void handleWidth() {
   if (statusActive.width != statusLocal.width) {
     statusActive.width = statusLocal.width;
     updateWidth();
+  }
+}
+
+void handleHue() {
+  if (statusActive.hue != statusLocal.hue) {
+    statusActive.hue = statusLocal.hue;
+    updateHue();
+  }
+}
+
+void handleSaturation() {
+  if (statusActive.saturation != statusLocal.saturation) {
+    statusActive.saturation = statusLocal.saturation;
+    updateSaturation();
   }
 }
 
@@ -410,6 +441,9 @@ void updateProgram() {
     case WLEDC_PRG_TWINKLE:
       enablePrgTwinkle();
       break;
+    case WLEDC_PRG_WAVES:
+      enablePrgWaves();
+      break;
   };
 }
 
@@ -431,12 +465,22 @@ void updateSpeed() {
       disablePrgTwinkle();
       enablePrgTwinkle();
       break;
+    case WLEDC_PRG_WAVES:
+      disablePrgWaves();
+      enablePrgWaves();
+      break;
   }
 }
 
 void updateWidth() {
   Serial.println("Updating Width");
 }
+
+void updateHue() {
+  Serial.println("Updating Hue");
+}
+
+void updateSaturation() { Serial.println("Updating Saturation"); }
 
 void updateRefresh() {
   Serial.println("Updating Refresh Period");
@@ -520,14 +564,35 @@ void disablePrgRainbow() {
   rainbowTicker.detach();
 }
 
-// ----- Twinkly -----
+// ----- Twinkle -----
 void enablePrgTwinkle() {
   Serial.println("Enable Program Twinkle");
+  random16_set_seed((uint16_t)ESP.getCycleCount());
+  twinkleTicker.attach_ms(statusActive.speed, makeTwinkle);
+  twinkleFadeTicker.attach_ms(statusActive.speed, twinkleFade);
 }
 
 void disablePrgTwinkle() {
   Serial.println("Disable Program Twinkle");
+  twinkleTicker.detach();
+  twinkleFadeTicker.detach();
 }
+
+void makeTwinkle() {
+  // Pick random LED, and random time to twinkle it.
+  if (random16()<statusActive.step) {
+    leds[random16(WSLEDS-1)] = CHSV(statusActive.hue, statusActive.saturation, 0xFF);
+  }
+}
+
+void twinkleFade() {
+  leds.fadeToBlackBy(statusActive.width);
+}
+
+// ----- Waves -----
+void enablePrgWaves() { Serial.println("Enable Program Waves"); }
+
+void disablePrgWaves() { Serial.println("Disable Program Waves"); }
 
 // ----- Disable All -----
 void disableAllPrg() {
@@ -540,8 +605,7 @@ void disableAllPrg() {
   disablePrgWhite50();
   disablePrgRainbow();
   disablePrgTwinkle();
-
-  // enablePrgBlack();
+  disablePrgWaves();
 }
 
 void printState(status_t state) {
@@ -551,6 +615,10 @@ void printState(status_t state) {
   Serial.print(state.active);
   Serial.print(" W:");
   Serial.print(state.width);
+  Serial.print(" H:");
+  Serial.print(state.hue);
+  Serial.print(" T:");
+  Serial.print(state.saturation);
   Serial.print(" C:");
   Serial.print(state.step);
   Serial.print(" B:");
