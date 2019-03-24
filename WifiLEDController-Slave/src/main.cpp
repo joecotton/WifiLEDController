@@ -115,6 +115,8 @@ Ticker twinkleFadeTicker;
 
 void enablePrgWaves();
 void disablePrgWaves();
+void waveDraw();
+Ticker waveTimer;
 
 void disableAllPrg();
 
@@ -318,8 +320,8 @@ void handleCommand() {
         break;
     };
 
-    Serial.println("handleCommand/local");
-    printState(statusLocal);
+    // Serial.println("handleCommand/local");
+    // printState(statusLocal);
     Serial.println("handleCommand/active");
     printState(statusActive);
 
@@ -590,9 +592,58 @@ void twinkleFade() {
 }
 
 // ----- Waves -----
-void enablePrgWaves() { Serial.println("Enable Program Waves"); }
+void enablePrgWaves() {
+  Serial.println("Enable Program Waves");
+  waveTimer.attach_ms(statusActive.speed, waveDraw);
+}
 
-void disablePrgWaves() { Serial.println("Disable Program Waves"); }
+void disablePrgWaves() {
+  Serial.println("Disable Program Waves");
+  waveTimer.detach();
+}
+
+void waveDraw() {
+  uint8_t numHumps = max((uint8_t)1,(uint8_t)statusActive.width);
+  uint16_t numRows = WSLEDS / min((uint16_t)numHumps, (uint16_t)WSLEDS);
+  uint8_t circleInterval = 0xFF / numHumps;
+  uint8_t wavesFold = 1;
+  // Serial.print("numHumps=");
+  // Serial.println(numHumps);
+  // Serial.print("numRows=");
+  // Serial.println(numRows);
+
+  static uint8_t pos; // Offset for start of sine wave
+
+  leds.fill_solid(CRGB::Black);
+
+  // j steps through each hump
+  // numHumps = 1 ==> One cycle through this llop
+  for (int j = 0; j < numHumps; j++) {
+    // Serial.print("j=");
+    // Serial.println(j);
+    int fadePct = pos + (j*circleInterval);
+    for (int f=0; f<wavesFold; f++) {
+      fadePct = cubicwave8(fadePct);
+    }
+    // Serial.print("fadepct=");
+    // Serial.println(fadePct);
+    CRGB colColor = CHSV(statusActive.hue, statusActive.saturation, 0xFF);
+    colColor.fadeToBlackBy(fadePct);
+    for (int k = 0; k < (numRows+1); k++) {
+      if (j+k*numHumps<WSLEDS) {
+        leds[ j + k*numHumps ] = colColor;
+      }
+      // Serial.print("k=");
+      // Serial.print(k);
+      // Serial.print("; changing LED:");
+      // Serial.print(j+k*numHumps);
+      // Serial.print("; Color:");
+      // Serial.println(colColor, HEX);
+    }
+  }
+  pos += statusActive.step;
+  // pos += 2;
+}
 
 // ----- Disable All -----
 void disableAllPrg() {
