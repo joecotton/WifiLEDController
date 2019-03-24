@@ -648,6 +648,7 @@ void drawMeter() {
       barLength = u8g2.getStrWidth(value);
       u8g2.setCursor((120 - barLength), 20);
       u8g2.print(value);
+      u8g2.print(F("R"));
       break;
     case 2:  // Width
       u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);
