@@ -27,10 +27,11 @@ char* menuTitles[] = {
 
 char* programNames[] = {
   "Black",          // 0
-  "White 50%",      // 1
+  "White",          // 1
   "Rainbow",        // 2
   "Twinkle",        // 3
-  "Waves"           // 4
+  "Waves",          // 4
+  "Dots"            // 5
 };
 
 const uint8_t MENUCOUNT = 9;
@@ -419,38 +420,43 @@ void rotary_loop(int16_t delta) {
     // Change the value of current menu item
     switch (currentMenu) {
       case 0: // Program
-        switch (statusLocal.program) {
-          case WLEDC_PRG_BLACK:
-          if (dir<0)
-            statusLocal.program = WLEDC_PRG_TWINKLE;
-          else
-            statusLocal.program = WLEDC_PRG_WHITE50;
-          break;
-          case WLEDC_PRG_WHITE50:
-          if (dir<0)
-            statusLocal.program = WLEDC_PRG_BLACK;
-          else
-            statusLocal.program = WLEDC_PRG_RAINBOW;
-          break;
-          case WLEDC_PRG_RAINBOW:
-          if (dir<0)
-            statusLocal.program = WLEDC_PRG_WHITE50;
-          else
-            statusLocal.program = WLEDC_PRG_TWINKLE;
-          break;
-          case WLEDC_PRG_TWINKLE:
-          if (dir<0)
-            statusLocal.program = WLEDC_PRG_RAINBOW;
-          else
-            statusLocal.program = WLEDC_PRG_WAVES;
-          break;
-          case WLEDC_PRG_WAVES:
-          if (dir<0)
-            statusLocal.program = WLEDC_PRG_TWINKLE;
-          else
-            statusLocal.program = WLEDC_PRG_BLACK;
-          break;
+        if (dir<0) {
+          --statusLocal.program;
+        } else {
+          ++statusLocal.program;
         }
+        // switch (statusLocal.program) {
+        //   case WLEDC_PRG_BLACK:
+        //   if (dir<0)
+        //     statusLocal.program = WLEDC_PRG_TWINKLE;
+        //   else
+        //     statusLocal.program = WLEDC_PRG_WHITE50;
+        //   break;
+        //   case WLEDC_PRG_WHITE50:
+        //   if (dir<0)
+        //     statusLocal.program = WLEDC_PRG_BLACK;
+        //   else
+        //     statusLocal.program = WLEDC_PRG_RAINBOW;
+        //   break;
+        //   case WLEDC_PRG_RAINBOW:
+        //   if (dir<0)
+        //     statusLocal.program = WLEDC_PRG_WHITE50;
+        //   else
+        //     statusLocal.program = WLEDC_PRG_TWINKLE;
+        //   break;
+        //   case WLEDC_PRG_TWINKLE:
+        //   if (dir<0)
+        //     statusLocal.program = WLEDC_PRG_RAINBOW;
+        //   else
+        //     statusLocal.program = WLEDC_PRG_WAVES;
+        //   break;
+        //   case WLEDC_PRG_WAVES:
+        //   if (dir<0)
+        //     statusLocal.program = WLEDC_PRG_TWINKLE;
+        //   else
+        //     statusLocal.program = WLEDC_PRG_BLACK;
+        //   break;
+        // }
         break;
       case 1: // Speed
         if (dir<0)
@@ -525,9 +531,9 @@ void printMenuState(uint8_t selected) {
 void printStatusValue(uint8_t selected) {
   switch (selected) {
     case 0: // Program
-      Serial.print(statusLocal.program);
+      Serial.print(static_cast<uint8_t>(statusLocal.program));
       Serial.print("/");
-      Serial.print(statusRemote.program);
+      Serial.print(static_cast<uint8_t>(statusRemote.program));
       break;
     case 1: // Speed
       Serial.print(statusLocal.speed);
@@ -574,7 +580,7 @@ void printStatusValue(uint8_t selected) {
 
 void printState(status_t state) {
   Serial.print("P:");
-  Serial.print(state.program);
+  Serial.print(static_cast<uint8_t>(state.program));
   Serial.print(" A:");
   Serial.print(state.active);
   Serial.print(" W:");
@@ -626,7 +632,7 @@ void drawMeter() {
       u8g2.setFont(u8g2_font_7x13_t_symbols);
       u8g2.setDrawColor(1);
       u8g2.setCursor(BAR_LEFT, BAR_BOTTOM);
-      u8g2.print(programNames[statusLocal.program]);
+      u8g2.print(programNames[static_cast<uint8_t>(statusLocal.program)]);
       break;
     case 1:  // Speed
       u8g2.drawFrame(BAR_LEFT, BAR_TOP, BAR_WIDTH, BAR_HEIGHT);

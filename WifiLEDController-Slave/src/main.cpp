@@ -118,6 +118,11 @@ void disablePrgWaves();
 void waveDraw();
 Ticker waveTimer;
 
+void enablePrgDots();
+void disablePrgDots();
+void dotDraw();
+Ticker dotTimer;
+
 void disableAllPrg();
 
 uint8_t pendingPongOut = 0;
@@ -424,27 +429,32 @@ void updateActive() {
     ledDisplayTicker.detach();
     leds.fill_solid(CRGB::Black);
     FastLED.show();
+    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
   }
 }
 
 void updateProgram() {
   Serial.println("Updating Program");
   disableAllPrg();
+  FastLED.clear();
   switch (statusActive.program) {
-    case WLEDC_PRG_BLACK:
+    case program_t::Black:
       enablePrgBlack();
       break;
-    case WLEDC_PRG_WHITE50:
+    case program_t::White:
       enablePrgWhite50();
       break;
-    case WLEDC_PRG_RAINBOW:
+    case program_t::Rainbow:
       enablePrgRainbow();
       break;
-    case WLEDC_PRG_TWINKLE:
+    case program_t::Twinkle:
       enablePrgTwinkle();
       break;
-    case WLEDC_PRG_WAVES:
+    case program_t::Waves:
       enablePrgWaves();
+      break;
+    case program_t::Dots:
+      enablePrgDots();
       break;
   };
 }
@@ -453,23 +463,27 @@ void updateSpeed() {
   Serial.println("Updating Speed");
   // Find active program and reset
   switch (statusActive.program) {
-    case WLEDC_PRG_BLACK:
+    case program_t::Black:
       break;
-    case WLEDC_PRG_WHITE50:
+    case program_t::White:
       disablePrgWhite50();
       enablePrgWhite50();
       break;
-    case WLEDC_PRG_RAINBOW:
+    case program_t::Rainbow:
       disablePrgRainbow();
       enablePrgRainbow();
       break;
-    case WLEDC_PRG_TWINKLE:
+    case program_t::Twinkle:
       disablePrgTwinkle();
       enablePrgTwinkle();
       break;
-    case WLEDC_PRG_WAVES:
+    case program_t::Waves:
       disablePrgWaves();
       enablePrgWaves();
+      break;
+    case program_t::Dots:
+      disablePrgDots();
+      enablePrgDots();
       break;
   }
 }
@@ -488,6 +502,9 @@ void updateRefresh() {
   Serial.println("Updating Refresh Period");
   if (ledDisplayTicker.active()) {
     ledDisplayTicker.detach();
+    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
+  } else {
+    FastLED.clear();
     ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
   }
 }
@@ -537,22 +554,23 @@ void disablePrgBlack() {
 
 void prgBlackDo() {
   leds.fill_solid(CRGB::Black);
+  FastLED.show();
 }
 
 // ----- White 50% -----
 void enablePrgWhite50() {
-  Serial.println("Enable Program White50");
+  Serial.println("Enable Program White");
   prgWhite50Do();
   prgWhite50Ticker.attach_ms(1000, prgWhite50Do);
 }
 
 void disablePrgWhite50() {
-  Serial.println("Disable Program White50");
+  Serial.println("Disable Program White");
   prgWhite50Ticker.detach();
 }
 
 void prgWhite50Do() {
-  leds.fill_solid(0x7F7F7F);
+  leds.fill_solid(CRGB::White);
 }
 
 // ----- Rainbow -----
@@ -645,23 +663,39 @@ void waveDraw() {
   // pos += 2;
 }
 
+// ----- Dots -----
+void enablePrgDots() {
+  Serial.println("Enable Program Dots");
+  dotTimer.attach_ms(statusActive.speed, dotDraw);
+}
+
+void disablePrgDots() {
+  Serial.println("Disable Program Dots");
+  dotTimer.detach();
+}
+
+void dotDraw() {
+
+}
+
 // ----- Disable All -----
 void disableAllPrg() {
   Serial.println("Disable Program All");
-
-  leds.fill_solid(CRGB::Black);
-  FastLED.show();
 
   disablePrgBlack();
   disablePrgWhite50();
   disablePrgRainbow();
   disablePrgTwinkle();
   disablePrgWaves();
+  disablePrgDots();
+
+  leds.fill_solid(CRGB::Black);
+  FastLED.show();
 }
 
 void printState(status_t state) {
   Serial.print("P:");
-  Serial.print(state.program);
+  Serial.print(static_cast<uint8_t>(state.program));
   Serial.print(" A:");
   Serial.print(state.active);
   Serial.print(" W:");

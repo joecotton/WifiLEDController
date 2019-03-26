@@ -8,13 +8,32 @@ enum command_type_t : uint8_t {
     WLEDC_CMD_PONG
 };
 
-enum program_t : uint8_t {
-  WLEDC_PRG_BLACK,
-  WLEDC_PRG_WHITE50,
-  WLEDC_PRG_RAINBOW,
-  WLEDC_PRG_TWINKLE,
-  WLEDC_PRG_WAVES
+enum class program_t : uint8_t {
+  Black,
+  White,
+  Rainbow,
+  Twinkle,
+  Waves,
+  Dots,
+  END_OF_LIST
 };
+
+program_t& operator++(program_t& p) {
+  p = static_cast<program_t>( static_cast<uint8_t>(p) + 1 );
+  if (p==program_t::END_OF_LIST) {
+    p = static_cast<program_t>( static_cast<uint8_t>(0) );
+  }
+  return p;
+}
+
+program_t& operator--(program_t& p) {
+  if (p == static_cast<program_t>(static_cast<uint8_t>(0))) {
+    p = static_cast<program_t>(static_cast<uint8_t>(program_t::END_OF_LIST) - 1);
+  } else {
+    p = static_cast<program_t>(static_cast<uint8_t>(p) - 1);
+  }
+  return p;
+}
 
 struct __attribute__((packed)) status_t
 {
@@ -57,6 +76,6 @@ struct __attribute__((packed)) command_t
 #define DEFAULT_SATURATION 0
 #define DEFAULT_STEP 2
 #define DEFAULT_BRIGHT 32
-#define DEFAULT_PROGRAM WLEDC_PRG_BLACK
+#define DEFAULT_PROGRAM program_t::Black
 #define DEFAULT_ACTIVE 0
 #define DEFAULT_REFRESH 17
