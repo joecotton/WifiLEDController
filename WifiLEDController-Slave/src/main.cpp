@@ -429,7 +429,6 @@ void updateActive() {
     ledDisplayTicker.detach();
     leds.fill_solid(CRGB::Black);
     FastLED.show();
-    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
   }
 }
 
