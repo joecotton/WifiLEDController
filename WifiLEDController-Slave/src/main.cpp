@@ -109,6 +109,7 @@ Ticker rainbowTicker;
 void enablePrgTwinkle();
 void disablePrgTwinkle();
 void makeTwinkle();
+void makeTwinkle2();
 void twinkleFade();
 Ticker twinkleTicker;
 Ticker twinkleFadeTicker;
@@ -590,7 +591,7 @@ void disablePrgRainbow() {
 void enablePrgTwinkle() {
   Serial.println("Enable Program Twinkle");
   random16_set_seed((uint16_t)ESP.getCycleCount());
-  twinkleTicker.attach_ms(statusActive.speed, makeTwinkle);
+  twinkleTicker.attach_ms(statusActive.speed, makeTwinkle2);
   twinkleFadeTicker.attach_ms(statusActive.speed, twinkleFade);
 }
 
@@ -604,6 +605,15 @@ void makeTwinkle() {
   // Pick random LED, and random time to twinkle it.
   if (random8()<statusActive.step) {
     leds[random16(WSLEDS-1)] = CHSV(statusActive.hue, statusActive.saturation, 0xFF);
+  }
+}
+
+void makeTwinkle2() {
+  // Iterate through all LEDS, choose random one to twinkle.
+  for (uint16_t a=0; a<WSLEDS; a++) {
+    if (random16()<statusActive.step) {
+      leds[a] = CHSV(statusActive.hue, statusActive.saturation, 0xFF);
+    }
   }
 }
 
