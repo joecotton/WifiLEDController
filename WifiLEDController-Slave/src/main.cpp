@@ -40,9 +40,9 @@ void initVariant()
 
 #define CHANNEL 1
 #define STATUS_LED D1
-#define WSPIN 3
+#define WSPIN 3  // RX
 // #define WSPIN D5
-#define WSLEDS 100
+#define WSLEDS 500
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -427,8 +427,11 @@ void updateActive() {
     ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
   } else {
     ledDisplayTicker.detach();
-    leds.fill_solid(CRGB::Black);
-    FastLED.show();
+    statusLocal.program = program_t::Black;
+    handleProgram();
+    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
+    // leds.fill_solid(CRGB::Black);
+    // FastLED.show();
   }
 }
 

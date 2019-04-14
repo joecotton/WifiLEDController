@@ -64,7 +64,7 @@ struct __attribute__((packed)) command_t
 #define WLEDC_MAX_SATURATION 255
 #define WLEDC_MIN_SATURATION 0
 #define WLEDC_MAX_REFRESH 2000
-#define WLEDC_MIN_REFRESH 4
+#define WLEDC_MIN_REFRESH 15
 #define WLEDC_MAX_STEP 2000
 #define WLEDC_MIN_STEP -2000
 #define WLEDC_MAX_BRIGHT 255
@@ -78,4 +78,4 @@ struct __attribute__((packed)) command_t
 #define DEFAULT_BRIGHT 32
 #define DEFAULT_PROGRAM program_t::Black
 #define DEFAULT_ACTIVE 0
-#define DEFAULT_REFRESH 17
+#define DEFAULT_REFRESH 25
