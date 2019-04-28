@@ -13,7 +13,7 @@ enum class program_t : uint8_t {
   White,
   Rainbow,
   Twinkle,
-  Waves,
+  Waves, 
   Dots,
   Waves2,
   TwinkleRainbow,

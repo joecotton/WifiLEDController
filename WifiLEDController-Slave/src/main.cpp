@@ -43,7 +43,8 @@ void initVariant()
 #define WSPIN 3  // RX
 // #define WSPIN D5
 #define WSLEDS 500
-#define MAX_POWER_MW 100000UL
+#define MAX_POWER_VOLTS 12
+#define MAX_POWER_MA 10000
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -198,7 +199,7 @@ void setup()
   pinMode(STATUS_LED, OUTPUT);
 
   FastLED.addLeds<WS2812, WSPIN, GRB>(leds, WSLEDS);
-  FastLED.setMaxPowerInMilliWatts(MAX_POWER_MW);
+  FastLED.setMaxPowerInVoltsAndMilliamps(MAX_POWER_VOLTS, MAX_POWER_MA);
   FastLED.setBrightness(statusActive.maxbright);
   FastLED.setCorrection(Typical8mmPixel);
 
@@ -226,7 +227,7 @@ void loop()
 
   if (isConnected) {
     // digitalWrite(STATUS_LED, HIGH);
-    analogWrite(STATUS_LED, 0x0080);
+    analogWrite(STATUS_LED, 0x0040);
   } else {
     // digitalWrite(STATUS_LED, LOW);
     analogWrite(STATUS_LED, 0x0000);
@@ -715,7 +716,7 @@ void waveDraw() {
 // ----- Waves 2 -----
 void enablePrgWaves2() {
   Serial.println("Enable Program Waves 2");
-  wave2Timer.attach_ms(statusActive.speed, waveDraw);
+  wave2Timer.attach_ms(statusActive.refresh_period_ms, wave2Draw);
 }
 
 void disablePrgWaves2() {
@@ -724,24 +725,24 @@ void disablePrgWaves2() {
 }
 
 void wave2Draw() {
-  uint16_t width = statusActive.width;
-
   // BPM for beatsin88 must be 8bits integer / 8bits fraction
   // If speed is in tenths of BPM, then accum88 can be close...
-  // bpm88 = speed << 7  (i.e. speed*127 or speed*0x80)
+  // bpm88 = speed << 7  (i.e. speed*128 or speed*0x80)
+  // bpm88 = speed << 6  (i.e. speed*64 or speed*0x40)
 
-  accum88 bpm = statusActive.speed << 6;
+  // accum88 bpm = statusActive.step << 7;
+  uint16_t step = statusActive.width;
+  uint16_t pos = 0;
 
-  static uint8_t pos; // Timebase offset for start of sine wave
 
   leds.fill_solid(CRGB::Black);  // Clear strip
 
-  for (uint16_t i = 0; i < width; i++) {
-    for (uint16_t j = i; j < WSLEDS; j+=width) {
-      leds[j] = CHSV(statusActive.hue, statusActive.saturation, beatsin88(bpm, 0, 0xFF, pos));
+  for (uint16_t j = 0; j < WSLEDS; j++) {
+    if (j<WSLEDS) {
+      leds[j] = CHSV(statusActive.hue, statusActive.saturation, beatsin8(statusActive.speed, 0, statusActive.maxbright, pos));
     }
+    pos += step;
   }
-  pos += statusActive.step;
 }
 
 // ----- Dots -----
@@ -775,9 +776,12 @@ void disablePrgTwinkleR() {
 
 void makeTwinkleR() {
   // Iterate through all LEDS, choose random one to twinkle.
+  // Hue set randomly
+  // Saturation set between 0 and preference
+  // Brightness set between 0 and preference
   for (uint16_t a=0; a<WSLEDS; a++) {
     if (random16(WLEDC_MAX_STEP<<4)<statusActive.step) {
-      leds[a] = CHSV(random8(), random8(statusActive.saturation), random8());
+      leds[a] = CHSV(random8(), random8(statusActive.saturation), random8(statusActive.maxbright));
     }
   }
 }
@@ -785,9 +789,6 @@ void makeTwinkleR() {
 void twinkleRFade() {
   leds.fadeToBlackBy(statusActive.width);
 }
-
-
-
 
 // ----- Disable All -----
 void disableAllPrg() {
