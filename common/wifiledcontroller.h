@@ -15,6 +15,8 @@ enum class program_t : uint8_t {
   Twinkle,
   Waves,
   Dots,
+  Waves2,
+  TwinkleRainbow,
   END_OF_LIST
 };
 

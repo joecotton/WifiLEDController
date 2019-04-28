@@ -21,7 +21,7 @@ char* menuTitles[] = {
   "Hue",           // 4
   "Saturation",    // 5
   "Brightness",    // 6
-  "Update Speed"  // 7
+  "Update Speed"   // 7
 };
   // "Active"         // 8
 
@@ -31,7 +31,9 @@ char* programNames[] = {
   "Rainbow",        // 2
   "Twinkle",        // 3
   "Waves",          // 4
-  "Dots"            // 5
+  "Dots",           // 5
+  "Waves 2",        // 6
+  "Twinkle Rainbow" // 7
 };
 
 const uint8_t MENUCOUNT = 8;
@@ -188,10 +190,8 @@ void loop()
   handleCommand();
   handleDisplay();
   
-  // rotary.loop();
   button.loop();
   activeSwitch.loop();
-	// rotary_loop();
 
   // if (isConnected) {
   //   digitalWrite(STATUS_LED, HIGH);

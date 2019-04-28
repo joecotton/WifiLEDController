@@ -67,10 +67,11 @@ void watchdogExpire();
 void drawLEDs();
 void drawNothing();
 
-    // ----- Program Switching -----
+// ----- Program Switching -----
 
-    Ticker ledDisplayTicker;
+Ticker ledDisplayTicker;
 
+// Set flags for changes
 void handleStatus();
 void handleActive();
 void handleSpeed();
@@ -82,6 +83,7 @@ void handleRefresh();
 void handleMaxBright();
 void handleCount();
 
+// Process flags for changes
 void updateProgram();
 void updateActive();
 void updateSpeed();
@@ -92,38 +94,57 @@ void updateRefresh();
 void updateMaxBright();
 void updateCount();
 
+// Program: Black
 void enablePrgBlack();
 void disablePrgBlack();
 void prgBlackDo();
 Ticker prgBlackTicker;
 
+// Program: White
 void enablePrgWhite50();
 void disablePrgWhite50();
 void prgWhite50Do();
 Ticker prgWhite50Ticker;
 
+// Program: Rainbow
 void enablePrgRainbow();
 void disablePrgRainbow();
 void incrementPallete();
 Ticker rainbowTicker;
 
+// Program: Twinkle
 void enablePrgTwinkle();
 void disablePrgTwinkle();
 void makeTwinkle();
-void makeTwinkle2();
 void twinkleFade();
 Ticker twinkleTicker;
 Ticker twinkleFadeTicker;
 
+// Program: Waves
 void enablePrgWaves();
 void disablePrgWaves();
 void waveDraw();
 Ticker waveTimer;
 
+// Program: Waves 2
+void enablePrgWaves2();
+void disablePrgWaves2();
+void wave2Draw();
+Ticker wave2Timer;
+
+// Program: Dots
 void enablePrgDots();
 void disablePrgDots();
 void dotDraw();
 Ticker dotTimer;
+
+// Program: Twinkle Rainbow
+void enablePrgTwinkleR();
+void disablePrgTwinkleR();
+void makeTwinkleR();
+void twinkleRFade();
+Ticker twinkleRTicker;
+Ticker twinkleRFadeTicker;
 
 void disableAllPrg();
 
@@ -204,9 +225,11 @@ void loop()
   handleStatus();
 
   if (isConnected) {
-    digitalWrite(STATUS_LED, HIGH);
+    // digitalWrite(STATUS_LED, HIGH);
+    analogWrite(STATUS_LED, 0x0080);
   } else {
-    digitalWrite(STATUS_LED, LOW);
+    // digitalWrite(STATUS_LED, LOW);
+    analogWrite(STATUS_LED, 0x0000);
   }
 }
 
@@ -459,6 +482,14 @@ void updateProgram() {
     case program_t::Dots:
       enablePrgDots();
       break;
+    case program_t::Waves2:
+      enablePrgWaves2();
+      break;
+    case program_t::TwinkleRainbow:
+      enablePrgTwinkleR();
+      break;
+    case program_t::END_OF_LIST:
+      break;
   };
 }
 
@@ -487,6 +518,16 @@ void updateSpeed() {
     case program_t::Dots:
       disablePrgDots();
       enablePrgDots();
+      break;
+    case program_t::TwinkleRainbow:
+      disablePrgTwinkleR();
+      enablePrgTwinkleR();
+      break;
+    case program_t::Waves2:
+      disablePrgWaves2();
+      enablePrgWaves2();
+      break;
+    case program_t::END_OF_LIST:
       break;
   }
 }
@@ -594,7 +635,7 @@ void disablePrgRainbow() {
 void enablePrgTwinkle() {
   Serial.println("Enable Program Twinkle");
   random16_set_seed((uint16_t)ESP.getCycleCount());
-  twinkleTicker.attach_ms(statusActive.speed, makeTwinkle2);
+  twinkleTicker.attach_ms(statusActive.speed, makeTwinkle);
   twinkleFadeTicker.attach_ms(statusActive.speed, twinkleFade);
 }
 
@@ -605,16 +646,9 @@ void disablePrgTwinkle() {
 }
 
 void makeTwinkle() {
-  // Pick random LED, and random time to twinkle it.
-  if (random8()<statusActive.step) {
-    leds[random16(WSLEDS-1)] = CHSV(statusActive.hue, statusActive.saturation, 0xFF);
-  }
-}
-
-void makeTwinkle2() {
   // Iterate through all LEDS, choose random one to twinkle.
   for (uint16_t a=0; a<WSLEDS; a++) {
-    if (random16()<statusActive.step) {
+    if (random16(WLEDC_MAX_STEP<<4) < statusActive.step) {
       leds[a] = CHSV(statusActive.hue, statusActive.saturation, 0xFF);
     }
   }
@@ -678,6 +712,38 @@ void waveDraw() {
   // pos += 2;
 }
 
+// ----- Waves 2 -----
+void enablePrgWaves2() {
+  Serial.println("Enable Program Waves 2");
+  wave2Timer.attach_ms(statusActive.speed, waveDraw);
+}
+
+void disablePrgWaves2() {
+  Serial.println("Disable Program Waves 2");
+  wave2Timer.detach();
+}
+
+void wave2Draw() {
+  uint16_t width = statusActive.width;
+
+  // BPM for beatsin88 must be 8bits integer / 8bits fraction
+  // If speed is in tenths of BPM, then accum88 can be close...
+  // bpm88 = speed << 7  (i.e. speed*127 or speed*0x80)
+
+  accum88 bpm = statusActive.speed << 6;
+
+  static uint8_t pos; // Timebase offset for start of sine wave
+
+  leds.fill_solid(CRGB::Black);  // Clear strip
+
+  for (uint16_t i = 0; i < width; i++) {
+    for (uint16_t j = i; j < WSLEDS; j+=width) {
+      leds[j] = CHSV(statusActive.hue, statusActive.saturation, beatsin88(bpm, 0, 0xFF, pos));
+    }
+  }
+  pos += statusActive.step;
+}
+
 // ----- Dots -----
 void enablePrgDots() {
   Serial.println("Enable Program Dots");
@@ -693,6 +759,36 @@ void dotDraw() {
 
 }
 
+// ----- Twinkle Rainbow -----
+void enablePrgTwinkleR() {
+  Serial.println("Enable Program Twinkle Rainbow");
+  random16_set_seed((uint16_t)ESP.getCycleCount());
+  twinkleRTicker.attach_ms(statusActive.speed, makeTwinkleR);
+  twinkleRFadeTicker.attach_ms(statusActive.speed, twinkleRFade);
+}
+
+void disablePrgTwinkleR() {
+  Serial.println("Disable Program Twinkle Rainbow");
+  twinkleRTicker.detach();
+  twinkleRFadeTicker.detach();
+}
+
+void makeTwinkleR() {
+  // Iterate through all LEDS, choose random one to twinkle.
+  for (uint16_t a=0; a<WSLEDS; a++) {
+    if (random16(WLEDC_MAX_STEP<<4)<statusActive.step) {
+      leds[a] = CHSV(random8(), random8(statusActive.saturation), random8());
+    }
+  }
+}
+
+void twinkleRFade() {
+  leds.fadeToBlackBy(statusActive.width);
+}
+
+
+
+
 // ----- Disable All -----
 void disableAllPrg() {
   Serial.println("Disable Program All");
@@ -703,6 +799,8 @@ void disableAllPrg() {
   disablePrgTwinkle();
   disablePrgWaves();
   disablePrgDots();
+  disablePrgWaves2();
+  disablePrgTwinkleR();
 
   leds.fill_solid(CRGB::Black);
   FastLED.show();
