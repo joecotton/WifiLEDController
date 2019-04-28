@@ -21,9 +21,9 @@ char* menuTitles[] = {
   "Hue",           // 4
   "Saturation",    // 5
   "Brightness",    // 6
-  "Update Speed",  // 7
-  "Active"         // 8
+  "Update Speed"  // 7
 };
+  // "Active"         // 8
 
 char* programNames[] = {
   "Black",          // 0
@@ -34,7 +34,7 @@ char* programNames[] = {
   "Dots"            // 5
 };
 
-const uint8_t MENUCOUNT = 9;
+const uint8_t MENUCOUNT = 8;
 uint8_t currentMenu = 0;
 uint8_t menuDirty = 1;
 
@@ -59,6 +59,7 @@ uint8_t mac[]       = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 #define ROTARY_A D5
 #define ROTARY_B D6
 #define ROTARY_BUTTON D7
+#define ACTIVE_SWITCH D3
 
 #define BAR_LEFT 0
 #define BAR_RIGHT (127 - 7 - 1 - 7 - 1)
@@ -94,6 +95,7 @@ void watchdogReset();
 void watchdogExpire();
 
 // void click(Button2& btn);
+void activeSwitchHandle(Button2& btn);
 void rotary_loop(int16_t);
 void handleRotary();
 
@@ -124,6 +126,7 @@ Ticker pingTicker;
 
 Encoder rotary(ROTARY_A, ROTARY_B);
 Button2 button = Button2(ROTARY_BUTTON, INPUT_PULLUP, 20U);
+Button2 activeSwitch = Button2(ACTIVE_SWITCH, INPUT_PULLUP, 20U);
 
 U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE, /* clock=*/ SCL, /* data=*/ SDA);   // pin remapping with ESP8266 HW I2C
 
@@ -131,8 +134,8 @@ uint8_t displayDirty = 1;
 
 void setup()
 {
-  pinMode(STATUS_LED, OUTPUT);
-  digitalWrite(STATUS_LED, LOW);
+  // pinMode(STATUS_LED, OUTPUT);
+  // digitalWrite(STATUS_LED, LOW);
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
 
@@ -158,7 +161,7 @@ void setup()
     // digitalWrite(STATUS_LED, LOW);
   }
 
-  // button.setReleasedHandler(click);
+  activeSwitch.setChangedHandler(activeSwitchHandle);
 
   statusLocal.active             = DEFAULT_ACTIVE;
   statusLocal.program            = DEFAULT_PROGRAM;
@@ -187,13 +190,14 @@ void loop()
   
   // rotary.loop();
   button.loop();
+  activeSwitch.loop();
 	// rotary_loop();
 
-  if (isConnected) {
-    digitalWrite(STATUS_LED, HIGH);
-  } else {
-    digitalWrite(STATUS_LED, LOW);
-  }
+  // if (isConnected) {
+  //   digitalWrite(STATUS_LED, HIGH);
+  // } else {
+  //   digitalWrite(STATUS_LED, LOW);
+  // }
 
 }
 
@@ -348,7 +352,7 @@ void handleCommand() {
       // A new status has been sent. We should update our local copy.
       // Serial.println("SETSTATUS CMD");
       break;
-    case WLEDC_CMD_STATUS:
+    case WLEDC_CMD_STATUS: 
       // Contains remote status
       break;
     case WLEDC_CMD_PING:
@@ -375,6 +379,18 @@ void handleCommand() {
 // void click(Button2& btn) {
 //   // Serial.println("click\n");
 // }
+
+void activeSwitchHandle(Button2& btn) {
+  if (btn.isPressed()) {
+    statusLocal.active = 1;
+  } else {
+    statusLocal.active = 0;
+  }
+  // statusLocal.active = !(statusLocal.active);
+  pendingStatusOut = 1;
+  menuDirty = 1;
+  displayDirty = 1;
+}
 
 void handleRotary() {
   static int16_t lastPos;
@@ -425,38 +441,6 @@ void rotary_loop(int16_t delta) {
         } else {
           ++statusLocal.program;
         }
-        // switch (statusLocal.program) {
-        //   case WLEDC_PRG_BLACK:
-        //   if (dir<0)
-        //     statusLocal.program = WLEDC_PRG_TWINKLE;
-        //   else
-        //     statusLocal.program = WLEDC_PRG_WHITE50;
-        //   break;
-        //   case WLEDC_PRG_WHITE50:
-        //   if (dir<0)
-        //     statusLocal.program = WLEDC_PRG_BLACK;
-        //   else
-        //     statusLocal.program = WLEDC_PRG_RAINBOW;
-        //   break;
-        //   case WLEDC_PRG_RAINBOW:
-        //   if (dir<0)
-        //     statusLocal.program = WLEDC_PRG_WHITE50;
-        //   else
-        //     statusLocal.program = WLEDC_PRG_TWINKLE;
-        //   break;
-        //   case WLEDC_PRG_TWINKLE:
-        //   if (dir<0)
-        //     statusLocal.program = WLEDC_PRG_RAINBOW;
-        //   else
-        //     statusLocal.program = WLEDC_PRG_WAVES;
-        //   break;
-        //   case WLEDC_PRG_WAVES:
-        //   if (dir<0)
-        //     statusLocal.program = WLEDC_PRG_TWINKLE;
-        //   else
-        //     statusLocal.program = WLEDC_PRG_BLACK;
-        //   break;
-        // }
         break;
       case 1: // Speed
         if (dir<0)
@@ -810,10 +794,8 @@ void displayDrawSummary() {
   u8g2.setFont(u8g2_font_7x13_t_symbols);
   u8g2.setDrawColor(1);
   if (isConnected) {
-    // u8g2.drawStr(113, 14, (char *)0x71);
     u8g2.drawGlyph((127-6), (33), 0x25cf);
   } else {
-    // u8g2.drawStr(113, 14, (char *)0x70);
     u8g2.drawGlyph((127-6), (33), 0x25cb);
   }
   if (statusLocal.active) {

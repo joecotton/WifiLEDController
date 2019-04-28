@@ -43,6 +43,7 @@ void initVariant()
 #define WSPIN 3  // RX
 // #define WSPIN D5
 #define WSLEDS 500
+#define MAX_POWER_MW 100000UL
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -64,11 +65,11 @@ void watchdogReset();
 void watchdogExpire();
 
 void drawLEDs();
-// void FillLEDsFromPaletteColors(uint8_t colorIndex);
+void drawNothing();
 
-// ----- Program Switching -----
+    // ----- Program Switching -----
 
-Ticker ledDisplayTicker;
+    Ticker ledDisplayTicker;
 
 void handleStatus();
 void handleActive();
@@ -175,7 +176,8 @@ void setup()
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(STATUS_LED, OUTPUT);
 
-  LEDS.addLeds<WS2812, WSPIN, GRB>(leds, WSLEDS);
+  FastLED.addLeds<WS2812, WSPIN, GRB>(leds, WSLEDS);
+  FastLED.setMaxPowerInMilliWatts(MAX_POWER_MW);
   FastLED.setBrightness(statusActive.maxbright);
   FastLED.setCorrection(Typical8mmPixel);
 
@@ -428,9 +430,7 @@ void updateActive() {
     ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
   } else {
     ledDisplayTicker.detach();
-    statusLocal.program = program_t::Black;
-    handleProgram();
-    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
+    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawNothing);
     // leds.fill_solid(CRGB::Black);
     // FastLED.show();
   }
@@ -528,9 +528,12 @@ void updateCount() {
 //-------------
 
 void drawLEDs() {
-  // if (!pendingTransmission) {
-    FastLED.show();
-  // }
+  FastLED.show();
+}
+
+void drawNothing() {
+  leds.fill_solid(CRGB::Black);
+  FastLED.show();
 }
 
 void incrementPallete() {
