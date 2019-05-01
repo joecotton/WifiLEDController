@@ -13,7 +13,7 @@ extern "C"
 #include "user_interface.h"
 }
 
-#include <../../common/wifiledcontroller.h>
+#include "../../common/wifiledcontroller.h"
 
 status_t statusLocal;
 status_t statusActive;
@@ -22,7 +22,7 @@ command_t commandBufferIn;
 
 uint8_t pendingCommand = 0;
 uint8_t pendingStatus = 0;
-// uint8_t pendingTransmission = 0;
+uint8_t pendingTransmission = 0;
 
 /* Set a private Mac Address
  *  http://serverfault.com/questions/40712/what-range-of-mac-addresses-can-i-safely-use-for-my-virtual-machines
@@ -44,7 +44,8 @@ void initVariant()
 // #define WSPIN D5
 #define WSLEDS 500
 #define MAX_POWER_VOLTS 12
-#define MAX_POWER_MA 10000
+#define MAX_POWER_MA 8000
+#define MIN_SPEED_ALT ((uint16_t)15)
 
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
@@ -83,17 +84,6 @@ void handleSaturation();
 void handleRefresh();
 void handleMaxBright();
 void handleCount();
-
-// Process flags for changes
-void updateProgram();
-void updateActive();
-void updateSpeed();
-void updateWidth();
-void updateHue();
-void updateSaturation();
-void updateRefresh();
-void updateMaxBright();
-void updateCount();
 
 // Program: Black
 void enablePrgBlack();
@@ -149,6 +139,9 @@ Ticker twinkleRFadeTicker;
 
 void disableAllPrg();
 
+Ticker memReportTicker;
+void printMem();
+
 uint8_t pendingPongOut = 0;
 uint8_t isConnected = 0;
 // uint32_t remoteTimestamp = 0L;
@@ -166,6 +159,8 @@ void setup()
 {
   Serial.begin(115200);
   Serial.println();
+
+  // memReportTicker.attach_ms(500U, printMem);
 
   // Initialize status
   statusActive.active            = DEFAULT_ACTIVE;
@@ -199,7 +194,7 @@ void setup()
   pinMode(STATUS_LED, OUTPUT);
 
   FastLED.addLeds<WS2812, WSPIN, GRB>(leds, WSLEDS);
-  FastLED.setMaxPowerInVoltsAndMilliamps(MAX_POWER_VOLTS, MAX_POWER_MA);
+  // FastLED.setMaxPowerInVoltsAndMilliamps(MAX_POWER_VOLTS, MAX_POWER_MA);
   FastLED.setBrightness(statusActive.maxbright);
   FastLED.setCorrection(Typical8mmPixel);
 
@@ -226,11 +221,11 @@ void loop()
   handleStatus();
 
   if (isConnected) {
-    // digitalWrite(STATUS_LED, HIGH);
-    analogWrite(STATUS_LED, 0x0040);
+    digitalWrite(STATUS_LED, HIGH);
+    // analogWrite(STATUS_LED, 0x0040);
   } else {
-    // digitalWrite(STATUS_LED, LOW);
-    analogWrite(STATUS_LED, 0x0000);
+    digitalWrite(STATUS_LED, LOW);
+    // analogWrite(STATUS_LED, 0x0000);
   }
 }
 
@@ -258,7 +253,7 @@ void InitESPNow() {
 }
 
 void onDataSent(uint8_t* macaddr, uint8_t status) {
-  // pendingTransmission = 0;
+  pendingTransmission = 0;
   digitalWrite(LED_BUILTIN, LOW);
   ledTicker.once_ms(10, flickLED);
 }
@@ -291,7 +286,7 @@ void sendStatus() {
 void sendCommand(command_type_t command) {
   commandBufferOut.cmd=command;
   memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
-  // pendingTransmission = 1;
+  pendingTransmission = 1;
   esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
 }
 
@@ -354,8 +349,8 @@ void handleCommand() {
 
     // Serial.println("handleCommand/local");
     // printState(statusLocal);
-    Serial.println("handleCommand/active");
-    printState(statusActive);
+    // Serial.println("handleCommand/active");
+    // printState(statusActive);
 
     pendingCommand = 0;
     // watchdogReset();
@@ -378,49 +373,124 @@ void handleStatus() {
 }
 
 void handleActive() {
+  Serial.println("Handling Active");
   if (statusActive.active != statusLocal.active) {
     statusActive.active = statusLocal.active;
-    updateActive();
+    Serial.println("Updating Active");
+    if (statusActive.active) {
+      ledDisplayTicker.detach();
+      ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
+    } else {
+      ledDisplayTicker.detach();
+      ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawNothing);
+    }
   }
 }
 
 void handleSpeed() {
-  Serial.println("Updating Speed");
+  Serial.println("Handling Speed");
   if (statusActive.speed != statusLocal.speed) {
     statusActive.speed = statusLocal.speed;
-    updateSpeed();
+    Serial.println("Updating Speed");
+    // Find active program and reset
+    switch (statusActive.program) {
+      case program_t::Black:
+        break;
+      case program_t::White:
+        disablePrgWhite50();
+        enablePrgWhite50();
+        break;
+      case program_t::Rainbow:
+        disablePrgRainbow();
+        enablePrgRainbow();
+        break;
+      case program_t::Twinkle:
+        disablePrgTwinkle();
+        enablePrgTwinkle();
+        break;
+      case program_t::Waves:
+        disablePrgWaves();
+        enablePrgWaves();
+        break;
+      case program_t::Dots:
+        disablePrgDots();
+        enablePrgDots();
+        break;
+      case program_t::TwinkleRainbow:
+        disablePrgTwinkleR();
+        enablePrgTwinkleR();
+        break;
+      case program_t::Waves2:
+        disablePrgWaves2();
+        enablePrgWaves2();
+        break;
+      case program_t::END_OF_LIST:
+        break;
+    }
   }
 }
 
 void handleProgram() {
+  Serial.println("Handling Program");
   if (statusActive.program != statusLocal.program) {
     statusActive.program = statusLocal.program;
-    updateProgram();
+    Serial.println("Updating Program");
+    disableAllPrg();
+    // FastLED.clear();
+    switch (statusActive.program) {
+      case program_t::Black:
+        enablePrgBlack();
+        break;
+      case program_t::White:
+        enablePrgWhite50();
+        break;
+      case program_t::Rainbow:
+        enablePrgRainbow();
+        break;
+      case program_t::Twinkle:
+        enablePrgTwinkle();
+        break;
+      case program_t::Waves:
+        enablePrgWaves();
+        break;
+      case program_t::Dots:
+        enablePrgDots();
+        break;
+      case program_t::Waves2:
+        enablePrgWaves2();
+        break;
+      case program_t::TwinkleRainbow:
+        enablePrgTwinkleR();
+        break;
+      case program_t::END_OF_LIST:
+        break;
+    };
   }
 }
 
 void handleWidth() {
+  Serial.println("Handling Width");
   if (statusActive.width != statusLocal.width) {
     statusActive.width = statusLocal.width;
-    updateWidth();
   }
 }
 
 void handleHue() {
+  Serial.println("Handling Hue");
   if (statusActive.hue != statusLocal.hue) {
     statusActive.hue = statusLocal.hue;
-    updateHue();
   }
 }
 
 void handleSaturation() {
+  Serial.println("Handling Saturation");
   if (statusActive.saturation != statusLocal.saturation) {
     statusActive.saturation = statusLocal.saturation;
-    updateSaturation();
   }
 }
 
 void handleRefresh() {
+  Serial.println("Handling Refresh");
   if (statusActive.refresh_period_ms != statusLocal.refresh_period_ms) {
     if (statusLocal.refresh_period_ms < WLEDC_MIN_REFRESH) {
       statusActive.refresh_period_ms = WLEDC_MIN_REFRESH;
@@ -429,140 +499,32 @@ void handleRefresh() {
     } else {
       statusActive.refresh_period_ms = statusLocal.refresh_period_ms;
     }
-    updateRefresh();
+    Serial.println("Updating Refresh Period");
+    if (ledDisplayTicker.active()) {
+      ledDisplayTicker.detach();
+      ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
+    } else {
+      FastLED.clear();
+      ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
+    }
   }
 }
 
 void handleMaxBright() {
+  Serial.println("Handling Brightness");
   if (statusActive.maxbright != statusLocal.maxbright) {
     statusActive.maxbright = statusLocal.maxbright;
-    updateMaxBright();
+    Serial.print("Updating Maximum Bright Level: ");
+    Serial.println(statusActive.maxbright);
+    FastLED.setBrightness(statusActive.maxbright);
   }
 }
 
 void handleCount() {
+  Serial.println("Handling Count");
   if (statusActive.step != statusLocal.step) {
     statusActive.step = statusLocal.step;
-    updateCount();
   }
-}
-
-void updateActive() {
-  Serial.println("Updating Active");
-  if (statusActive.active) {
-    ledDisplayTicker.detach();
-    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
-  } else {
-    ledDisplayTicker.detach();
-    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawNothing);
-    // leds.fill_solid(CRGB::Black);
-    // FastLED.show();
-  }
-}
-
-void updateProgram() {
-  Serial.println("Updating Program");
-  disableAllPrg();
-  FastLED.clear();
-  switch (statusActive.program) {
-    case program_t::Black:
-      enablePrgBlack();
-      break;
-    case program_t::White:
-      enablePrgWhite50();
-      break;
-    case program_t::Rainbow:
-      enablePrgRainbow();
-      break;
-    case program_t::Twinkle:
-      enablePrgTwinkle();
-      break;
-    case program_t::Waves:
-      enablePrgWaves();
-      break;
-    case program_t::Dots:
-      enablePrgDots();
-      break;
-    case program_t::Waves2:
-      enablePrgWaves2();
-      break;
-    case program_t::TwinkleRainbow:
-      enablePrgTwinkleR();
-      break;
-    case program_t::END_OF_LIST:
-      break;
-  };
-}
-
-void updateSpeed() {
-  Serial.println("Updating Speed");
-  // Find active program and reset
-  switch (statusActive.program) {
-    case program_t::Black:
-      break;
-    case program_t::White:
-      disablePrgWhite50();
-      enablePrgWhite50();
-      break;
-    case program_t::Rainbow:
-      disablePrgRainbow();
-      enablePrgRainbow();
-      break;
-    case program_t::Twinkle:
-      disablePrgTwinkle();
-      enablePrgTwinkle();
-      break;
-    case program_t::Waves:
-      disablePrgWaves();
-      enablePrgWaves();
-      break;
-    case program_t::Dots:
-      disablePrgDots();
-      enablePrgDots();
-      break;
-    case program_t::TwinkleRainbow:
-      disablePrgTwinkleR();
-      enablePrgTwinkleR();
-      break;
-    case program_t::Waves2:
-      disablePrgWaves2();
-      enablePrgWaves2();
-      break;
-    case program_t::END_OF_LIST:
-      break;
-  }
-}
-
-void updateWidth() {
-  Serial.println("Updating Width");
-}
-
-void updateHue() {
-  Serial.println("Updating Hue");
-}
-
-void updateSaturation() { Serial.println("Updating Saturation"); }
-
-void updateRefresh() {
-  Serial.println("Updating Refresh Period");
-  if (ledDisplayTicker.active()) {
-    ledDisplayTicker.detach();
-    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
-  } else {
-    FastLED.clear();
-    ledDisplayTicker.attach_ms(statusActive.refresh_period_ms, drawLEDs);
-  }
-}
-
-void updateMaxBright() {
-  Serial.print("Updating Maximum Bright Level: ");
-  Serial.println(statusActive.maxbright);
-  FastLED.setBrightness(statusActive.maxbright);
-}
-
-void updateCount() {
-  Serial.println("Updating Count");
-  Serial.println(statusActive.step);
 }
 
 //-------------
@@ -602,7 +564,7 @@ void disablePrgBlack() {
 
 void prgBlackDo() {
   leds.fill_solid(CRGB::Black);
-  FastLED.show();
+  // FastLED.show();
 }
 
 // ----- White 50% -----
@@ -624,7 +586,7 @@ void prgWhite50Do() {
 // ----- Rainbow -----
 void enablePrgRainbow() {
   Serial.println("Enable Program Rainbow");
-  rainbowTicker.attach_ms(statusActive.speed, incrementPallete);
+  rainbowTicker.attach_ms(max(MIN_SPEED_ALT, statusActive.speed), incrementPallete);
 }
 
 void disablePrgRainbow() {
@@ -636,8 +598,8 @@ void disablePrgRainbow() {
 void enablePrgTwinkle() {
   Serial.println("Enable Program Twinkle");
   random16_set_seed((uint16_t)ESP.getCycleCount());
-  twinkleTicker.attach_ms(statusActive.speed, makeTwinkle);
-  twinkleFadeTicker.attach_ms(statusActive.speed, twinkleFade);
+  twinkleTicker.attach_ms(max(MIN_SPEED_ALT, statusActive.speed), makeTwinkle);
+  twinkleFadeTicker.attach_ms(max(MIN_SPEED_ALT, statusActive.speed), twinkleFade);
 }
 
 void disablePrgTwinkle() {
@@ -662,7 +624,7 @@ void twinkleFade() {
 // ----- Waves -----
 void enablePrgWaves() {
   Serial.println("Enable Program Waves");
-  waveTimer.attach_ms(statusActive.speed, waveDraw);
+  waveTimer.attach_ms(max(MIN_SPEED_ALT, statusActive.speed), waveDraw);
 }
 
 void disablePrgWaves() {
@@ -725,30 +687,26 @@ void disablePrgWaves2() {
 }
 
 void wave2Draw() {
-  // BPM for beatsin88 must be 8bits integer / 8bits fraction
-  // If speed is in tenths of BPM, then accum88 can be close...
-  // bpm88 = speed << 7  (i.e. speed*128 or speed*0x80)
-  // bpm88 = speed << 6  (i.e. speed*64 or speed*0x40)
-
-  // accum88 bpm = statusActive.step << 7;
   uint16_t step = statusActive.width;
   uint16_t pos = 0;
+  uint16_t hueDelta = 0;
 
 
   leds.fill_solid(CRGB::Black);  // Clear strip
 
   for (uint16_t j = 0; j < WSLEDS; j++) {
     if (j<WSLEDS) {
-      leds[j] = CHSV(statusActive.hue, statusActive.saturation, beatsin8(statusActive.speed, 0, statusActive.maxbright, pos));
+      leds[j] = CHSV(statusActive.hue+hueDelta+pos, statusActive.saturation, beatsin8(statusActive.speed, 0, 0xFF, pos));
     }
     pos += step;
+    hueDelta += statusActive.step;
   }
 }
 
 // ----- Dots -----
 void enablePrgDots() {
   Serial.println("Enable Program Dots");
-  dotTimer.attach_ms(statusActive.speed, dotDraw);
+  dotTimer.attach_ms(max(MIN_SPEED_ALT, statusActive.speed), dotDraw);
 }
 
 void disablePrgDots() {
@@ -764,8 +722,8 @@ void dotDraw() {
 void enablePrgTwinkleR() {
   Serial.println("Enable Program Twinkle Rainbow");
   random16_set_seed((uint16_t)ESP.getCycleCount());
-  twinkleRTicker.attach_ms(statusActive.speed, makeTwinkleR);
-  twinkleRFadeTicker.attach_ms(statusActive.speed, twinkleRFade);
+  twinkleRTicker.attach_ms(max(MIN_SPEED_ALT, statusActive.speed), makeTwinkleR);
+  twinkleRFadeTicker.attach_ms(max(MIN_SPEED_ALT, statusActive.speed), twinkleRFade);
 }
 
 void disablePrgTwinkleR() {
@@ -781,7 +739,7 @@ void makeTwinkleR() {
   // Brightness set between 0 and preference
   for (uint16_t a=0; a<WSLEDS; a++) {
     if (random16(WLEDC_MAX_STEP<<4)<statusActive.step) {
-      leds[a] = CHSV(random8(), random8(statusActive.saturation), random8(statusActive.maxbright));
+      leds[a] = CHSV(random8(), random8(statusActive.saturation), random8(0xFF));
     }
   }
 }
@@ -825,4 +783,9 @@ void printState(status_t state) {
   Serial.print(" S:");
   Serial.print(state.speed);
   Serial.println();
+}
+
+void printMem() {
+  Serial.print("H ");
+  Serial.println(ESP.getMaxFreeBlockSize());
 }

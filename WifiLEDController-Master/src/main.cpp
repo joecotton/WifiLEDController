@@ -35,7 +35,7 @@ char* programNames[] = {
   "Waves 2",        // 6
   "Twinkle Rainbow" // 7
 };
-
+ 
 const uint8_t MENUCOUNT = 8;
 uint8_t currentMenu = 0;
 uint8_t menuDirty = 1;
@@ -96,6 +96,8 @@ void sendPing();
 void watchdogReset();
 void watchdogExpire();
 
+void commandThrottle();
+
 // void click(Button2& btn);
 void activeSwitchHandle(Button2& btn);
 void rotary_loop(int16_t);
@@ -110,6 +112,7 @@ void drawMeter();
 uint8_t volatile pendingStatusIn = 0;
 uint8_t volatile pendingCommand = 0;
 uint8_t volatile pendingCommandSending = 0;
+uint8_t volatile Throttle = 0;
 uint8_t isConnected = 0;
 uint8_t pendingPongIn = 0;
 uint8_t volatile pendingStatusOut = 0;
@@ -125,10 +128,11 @@ Ticker ledTicker;
 Ticker toggleActiveTicker;
 Ticker watchdogTicker;
 Ticker pingTicker;
+Ticker commandThrottleTicker;
 
 Encoder rotary(ROTARY_A, ROTARY_B);
 Button2 button = Button2(ROTARY_BUTTON, INPUT_PULLUP, 20U);
-Button2 activeSwitch = Button2(ACTIVE_SWITCH, INPUT_PULLUP, 20U);
+Button2 activeSwitch = Button2(ACTIVE_SWITCH, INPUT_PULLUP, 15U);
 
 U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE, /* clock=*/ SCL, /* data=*/ SDA);   // pin remapping with ESP8266 HW I2C
 
@@ -163,7 +167,9 @@ void setup()
     // digitalWrite(STATUS_LED, LOW);
   }
 
-  activeSwitch.setChangedHandler(activeSwitchHandle);
+  // activeSwitch.setChangedHandler(activeSwitchHandle);
+  // activeSwitch.setTapHandler(activeSwitchHandle);
+  activeSwitch.setReleasedHandler(activeSwitchHandle);
 
   statusLocal.active             = DEFAULT_ACTIVE;
   statusLocal.program            = DEFAULT_PROGRAM;
@@ -273,7 +279,7 @@ void requestStatus() {
 
 void sendCommand(command_type_t command) {
   // Serial.println("Sending requested Status");
-  if (!pendingCommandSending) {
+  if (!pendingCommandSending && !Throttle) {
     commandBufferOut.cmd=command;
     // commandBufferOut.timestamp=millis();
     memcpy(&(commandBufferOut.stat), &statusLocal, sizeof(statusLocal));
@@ -282,6 +288,7 @@ void sendCommand(command_type_t command) {
       pendingStatusIn = 1;
     }
 
+    commandThrottleTicker.once_ms(10U, commandThrottle);
     esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
   }
 }
@@ -294,6 +301,10 @@ void handlePendingSendStatus() {
     sendCommand(WLEDC_CMD_GETSTATUS);
     pendingStatusOut = 0;
   }
+}
+
+void commandThrottle() {
+  Throttle = 0;
 }
 
 void handlePendingRecvStatus() {
@@ -381,10 +392,10 @@ void handleCommand() {
 // }
 
 void activeSwitchHandle(Button2& btn) {
-  if (btn.isPressed()) {
-    statusLocal.active = 1;
-  } else {
+  if (statusLocal.active) {
     statusLocal.active = 0;
+  } else {
+    statusLocal.active = 1;
   }
   // statusLocal.active = !(statusLocal.active);
   pendingStatusOut = 1;
