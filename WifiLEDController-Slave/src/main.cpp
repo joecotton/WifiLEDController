@@ -221,11 +221,11 @@ void loop()
   handleStatus();
 
   if (isConnected) {
-    digitalWrite(STATUS_LED, HIGH);
-    // analogWrite(STATUS_LED, 0x0040);
+    // digitalWrite(STATUS_LED, HIGH);
+    analogWrite(STATUS_LED, 0x0008);
   } else {
-    digitalWrite(STATUS_LED, LOW);
-    // analogWrite(STATUS_LED, 0x0000);
+    // digitalWrite(STATUS_LED, LOW);
+    analogWrite(STATUS_LED, 0x0000);
   }
 }
 
@@ -688,9 +688,10 @@ void disablePrgWaves2() {
 
 void wave2Draw() {
   uint16_t step = statusActive.width;
-  uint16_t pos = 0;
+  static uint16_t pos;
   uint16_t hueDelta = 0;
 
+  pos += statusActive.step;
 
   leds.fill_solid(CRGB::Black);  // Clear strip
 
@@ -698,7 +699,6 @@ void wave2Draw() {
     if (j<WSLEDS) {
       leds[j] = CHSV(statusActive.hue+hueDelta+pos, statusActive.saturation, beatsin8(statusActive.speed, 0, 0xFF, pos));
     }
-    pos += step;
     hueDelta += statusActive.step;
   }
 }

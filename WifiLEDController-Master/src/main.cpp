@@ -71,6 +71,8 @@ uint8_t mac[]       = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 #define BAR_WIDTH (BAR_RIGHT-BAR_LEFT+1)
 #define BAR_HEIGHT  (BAR_BOTTOM-BAR_TOP+1)
 
+#define THROTTLE_DELAY 20U
+
 void printMacAddress(uint8_t* macaddr);
 void onDataSent(uint8_t* macaddr, uint8_t status);
 void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len);
@@ -288,7 +290,7 @@ void sendCommand(command_type_t command) {
       pendingStatusIn = 1;
     }
 
-    commandThrottleTicker.once_ms(10U, commandThrottle);
+    commandThrottleTicker.once_ms(THROTTLE_DELAY, commandThrottle);
     esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
   }
 }
