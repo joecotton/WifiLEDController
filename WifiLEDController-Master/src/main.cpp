@@ -242,14 +242,15 @@ void InitESPNow() {
   esp_now_register_recv_cb(onDataRecv);
 }
 
-void onDataSent(uint8_t* macaddr, uint8_t status) {
+void ICACHE_FLASH_ATTR onDataSent(uint8_t* macaddr, uint8_t status) {
   digitalWrite(LED_BUILTIN, LOW);
   ledTicker.once_ms(80, flickLED);
   pendingCommandSending = 0;
   // Serial.println("Data sent successfully");
 }
 
-void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
+void ICACHE_FLASH_ATTR onDataRecv(uint8_t* macaddr, uint8_t* data,
+                                  uint8_t len) {
   // The only data we will actually be receiving is a command packet with the remote's status
   // Only act if that's the case
   // Serial.println("Command Received");

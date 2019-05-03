@@ -252,13 +252,13 @@ void InitESPNow() {
   esp_now_register_recv_cb(onDataRecv);
 }
 
-void onDataSent(uint8_t* macaddr, uint8_t status) {
+void ICACHE_FLASH_ATTR onDataSent(uint8_t* macaddr, uint8_t status) {
   pendingTransmission = 0;
   digitalWrite(LED_BUILTIN, LOW);
   ledTicker.once_ms(10, flickLED);
 }
 
-void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
+void ICACHE_FLASH_ATTR onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
   // The only data we will actually be receiving is a command packet with the remote's status
   // Only act if that's the case
   // Serial.println("Command Received");
@@ -691,15 +691,14 @@ void wave2Draw() {
   static uint16_t pos;
   uint16_t hueDelta = 0;
 
-  pos += statusActive.step;
-
   leds.fill_solid(CRGB::Black);  // Clear strip
 
   for (uint16_t j = 0; j < WSLEDS; j++) {
     if (j<WSLEDS) {
-      leds[j] = CHSV(statusActive.hue+hueDelta+pos, statusActive.saturation, beatsin8(statusActive.speed, 0, 0xFF, pos));
+      leds[j] = CHSV(statusActive.hue+hueDelta+j, statusActive.saturation, beatsin8(statusActive.speed, 0, 0xFF, pos));
     }
-    hueDelta += statusActive.step;
+    pos += statusActive.step;
+    hueDelta++;
   }
 }
 
@@ -715,7 +714,23 @@ void disablePrgDots() {
 }
 
 void dotDraw() {
+  // Width - length of cycle
+  // Step - lengh of on LEDs
+  static uint16_t pos;
 
+  pos++;
+
+  leds.fill_solid(CRGB::Black);  // Clear strip
+
+  for (uint16_t j = 0; j < WSLEDS; j++) {
+    if (j<WSLEDS) {
+      uint16_t i = j % statusActive.width;
+      if ((i+pos) < statusActive.step) {
+        // Draw
+        leds[j] = CHSV(statusActive.hue, statusActive.saturation, 0xFF);
+      }
+    }
+  }
 }
 
 // ----- Twinkle Rainbow -----
