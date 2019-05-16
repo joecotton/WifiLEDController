@@ -51,23 +51,23 @@ void initVariant()
 #define max(a,b) ((a)>(b)?(a):(b))
 
 void printMacAddress(uint8_t* macaddr);
-void onDataSent(uint8_t* macaddr, uint8_t status);
-void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len);
+void ICACHE_RAM_ATTR onDataSent(uint8_t *macaddr, uint8_t status);
+void ICACHE_RAM_ATTR onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len);
 void InitWifi();
 void InitESPNow();
 
 void sendStatus();
 void sendCommand(command_type_t command);
 
-void flickLED();
+void ICACHE_RAM_ATTR flickLED();
 
-void handleCommand();
-void handlePing();
+void ICACHE_RAM_ATTR handleCommand();
+void ICACHE_RAM_ATTR handlePing();
 
 void printState(status_t state);
 
-void watchdogReset();
-void watchdogExpire();
+void ICACHE_RAM_ATTR watchdogReset();
+void ICACHE_RAM_ATTR watchdogExpire();
 
 void drawLEDs();
 void drawNothing();
@@ -80,7 +80,7 @@ Ticker ledDisplayTicker;
 void handleStatus();
 void handleActive();
 void handleSpeed();
-void handleProgram();
+void ICACHE_RAM_ATTR handleProgram();
 void handleWidth();
 void handleHue();
 void handleSaturation();
@@ -91,56 +91,56 @@ void handleCount();
 // Program: Black
 void enablePrgBlack();
 void disablePrgBlack();
-void prgBlackDo();
+void ICACHE_RAM_ATTR prgBlackDo();
 Ticker prgBlackTicker;
 
 // Program: White
 void enablePrgWhite50();
 void disablePrgWhite50();
-void prgWhite50Do();
+void ICACHE_RAM_ATTR prgWhite50Do();
 Ticker prgWhite50Ticker;
 
 // Program: Rainbow
 void enablePrgRainbow();
 void disablePrgRainbow();
-void incrementPallete();
+void ICACHE_RAM_ATTR incrementPallete();
 Ticker rainbowTicker;
 
 // Program: Twinkle
 void enablePrgTwinkle();
 void disablePrgTwinkle();
-void makeTwinkle();
-void twinkleFade();
+void ICACHE_RAM_ATTR makeTwinkle();
+void ICACHE_RAM_ATTR twinkleFade();
 Ticker twinkleTicker;
 Ticker twinkleFadeTicker;
 
 // Program: Waves
 void enablePrgWaves();
 void disablePrgWaves();
-void waveDraw();
+void ICACHE_RAM_ATTR waveDraw();
 Ticker waveTimer;
 
 // Program: Waves 2
 void enablePrgWaves2();
 void disablePrgWaves2();
-void wave2Draw();
+void ICACHE_RAM_ATTR wave2Draw();
 Ticker wave2Timer;
 
 // Program: Dots
 void enablePrgDots();
 void disablePrgDots();
-void dotDraw();
+void ICACHE_RAM_ATTR dotDraw();
 Ticker dotTimer;
 
 // Program: Twinkle Rainbow
 void enablePrgTwinkleR();
 void disablePrgTwinkleR();
-void makeTwinkleR();
-void twinkleRFade();
+void ICACHE_RAM_ATTR makeTwinkleR();
+void ICACHE_RAM_ATTR twinkleRFade();
 Ticker twinkleRTicker;
 Ticker twinkleRFadeTicker;
 
-void disableAllPrg();
+void ICACHE_RAM_ATTR disableAllPrg();
 
 Ticker memReportTicker;
 void printMem();
@@ -255,13 +255,13 @@ void InitESPNow() {
   esp_now_register_recv_cb(onDataRecv);
 }
 
-void onDataSent(uint8_t* macaddr, uint8_t status) {
+void ICACHE_RAM_ATTR onDataSent(uint8_t *macaddr, uint8_t status) {
   pendingTransmission = 0;
   digitalWrite(LED_BUILTIN, LOW);
   ledTicker.once_ms(10, flickLED);
 }
 
-void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
+void ICACHE_RAM_ATTR onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
   // The only data we will actually be receiving is a command packet with the remote's status
   // Only act if that's the case
   // Serial.println("Command Received");
@@ -276,7 +276,7 @@ void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
   }
 }
 
-void flickLED() {
+void ICACHE_RAM_ATTR flickLED() {
   // ledTicker.detach();
   digitalWrite(LED_BUILTIN, HIGH);
 }
@@ -293,7 +293,7 @@ void sendCommand(command_type_t command) {
   esp_now_send(remoteMac, (uint8_t *)&commandBufferOut, sizeof(commandBufferOut));
 }
 
-void handlePing() {
+void ICACHE_RAM_ATTR handlePing() {
   if (pendingPongOut) {
     pendingPongOut = 0;
     // Reset watchdog timer
@@ -304,18 +304,18 @@ void handlePing() {
   }
 }
 
-void watchdogExpire() {
+void ICACHE_RAM_ATTR watchdogExpire() {
   // Serial.println("Watchdog Expired...");
   isConnected = 0;
 }
 
-void watchdogReset() {
+void ICACHE_RAM_ATTR watchdogReset() {
   watchdogTicker.detach();
   isConnected = 1;
-  watchdogTicker.once_ms(1200, watchdogExpire);
+  watchdogTicker.once_ms(2000, watchdogExpire);
 }
 
-void handleCommand() {
+void ICACHE_RAM_ATTR handleCommand() {
   if (pendingCommand) {
 
     // remoteTimestamp = commandBufferIn.timestamp;
@@ -433,11 +433,11 @@ void handleSpeed() {
   }
 }
 
-void handleProgram() {
-  Serial.println("Handling Program");
+void ICACHE_RAM_ATTR handleProgram() {
+  // Serial.println("Handling Program");
   if (statusActive.program != statusLocal.program) {
     statusActive.program = statusLocal.program;
-    Serial.println("Updating Program");
+    // Serial.println("Updating Program");
     disableAllPrg();
     // FastLED.clear();
     switch (statusActive.program) {
@@ -469,6 +469,7 @@ void handleProgram() {
         break;
     };
   }
+  handleActive();
 }
 
 void handleWidth() {
@@ -544,7 +545,7 @@ void drawNothing() {
   FastLED.show();
 }
 
-void incrementPallete() {
+void ICACHE_RAM_ATTR incrementPallete() {
   static uint8_t currentHue;
   currentHue += statusActive.width;
   // leds.fill_rainbow(currentHue);
@@ -566,7 +567,7 @@ void disablePrgBlack() {
   prgBlackTicker.detach();
 }
 
-void prgBlackDo() {
+void ICACHE_RAM_ATTR prgBlackDo() {
   leds.fill_solid(CRGB::Black);
   // FastLED.show();
 }
@@ -583,7 +584,7 @@ void disablePrgWhite50() {
   prgWhite50Ticker.detach();
 }
 
-void prgWhite50Do() {
+void ICACHE_RAM_ATTR prgWhite50Do() {
   leds.fill_solid(CRGB::White);
 }
 
@@ -638,7 +639,7 @@ void disablePrgTwinkle() {
   twinkleFadeTicker.detach();
 }
 
-void makeTwinkle() {
+void ICACHE_RAM_ATTR makeTwinkle() {
   // Iterate through all LEDS, choose random one to twinkle.
   for (uint16_t a=0; a<WSLEDS; a++) {
     if (random16(WLEDC_MAX_STEP<<4) < statusActive.step) {
@@ -647,7 +648,7 @@ void makeTwinkle() {
   }
 }
 
-void twinkleFade() {
+void ICACHE_RAM_ATTR twinkleFade() {
   leds.fadeToBlackBy(statusActive.width);
 }
 
@@ -670,7 +671,7 @@ void disablePrgWaves() {
   waveTimer.detach();
 }
 
-void waveDraw() {
+void ICACHE_RAM_ATTR waveDraw() {
   uint8_t numHumps = max((uint8_t)1,(uint8_t)statusActive.width);
   uint16_t numRows = WSLEDS / min((uint16_t)numHumps, (uint16_t)WSLEDS);
   uint8_t circleInterval = 0xFF / numHumps;
@@ -724,7 +725,7 @@ void disablePrgWaves2() {
   wave2Timer.detach();
 }
 
-void wave2Draw() {
+void ICACHE_RAM_ATTR wave2Draw() {
   // uint16_t step = statusActive.width;
   // static uint16_t pos;
   // uint16_t hueDelta = 0;
@@ -816,7 +817,7 @@ void disablePrgTwinkleR() {
   twinkleRFadeTicker.detach();
 }
 
-void makeTwinkleR() {
+void ICACHE_RAM_ATTR makeTwinkleR() {
   // Iterate through all LEDS, choose random one to twinkle.
   // Hue set randomly
   // Saturation set between 0 and preference
@@ -828,12 +829,12 @@ void makeTwinkleR() {
   }
 }
 
-void twinkleRFade() {
+void ICACHE_RAM_ATTR twinkleRFade() {
   leds.fadeToBlackBy(statusActive.width);
 }
 
 // ----- Disable All -----
-void disableAllPrg() {
+void ICACHE_RAM_ATTR disableAllPrg() {
   Serial.println("Disable Program All");
 
   disablePrgBlack();

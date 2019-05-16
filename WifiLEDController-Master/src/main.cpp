@@ -58,8 +58,8 @@ uint8_t mac[]       = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 
 #define CHANNEL 1
 #define STATUS_LED D3
-#define ROTARY_A D5
-#define ROTARY_B D6
+#define ROTARY_A D6
+#define ROTARY_B D5
 #define ROTARY_BUTTON D7
 #define ACTIVE_SWITCH D3
 
@@ -71,11 +71,11 @@ uint8_t mac[]       = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 #define BAR_WIDTH (BAR_RIGHT-BAR_LEFT+1)
 #define BAR_HEIGHT  (BAR_BOTTOM-BAR_TOP+1)
 
-#define THROTTLE_DELAY 20U
+#define THROTTLE_DELAY 50U
 
 void printMacAddress(uint8_t* macaddr);
-void onDataSent(uint8_t* macaddr, uint8_t status);
-void onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len);
+void ICACHE_RAM_ATTR onDataSent(uint8_t* macaddr, uint8_t status);
+void ICACHE_RAM_ATTR onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len);
 void InitWifi();
 void InitESPNow();
 void requestStatus();
@@ -102,8 +102,8 @@ void commandThrottle();
 
 // void click(Button2& btn);
 void activeSwitchHandle(Button2& btn);
-void rotary_loop(int16_t);
-void handleRotary();
+void ICACHE_RAM_ATTR rotary_loop(int16_t);
+void ICACHE_RAM_ATTR handleRotary();
 
 void handleDisplay();
 void displayDrawCurrentMenu();
@@ -183,7 +183,7 @@ void setup()
   statusLocal.maxbright          = DEFAULT_BRIGHT;
   statusLocal.step               = DEFAULT_STEP;
 
-  pingTicker.attach_ms(598, sendPing);
+  pingTicker.attach_ms(1204, sendPing);
 
   requestStatus();
 }
@@ -343,7 +343,7 @@ void watchdogReset() {
   isConnected = 1;
   displayDirty = 1;
   watchdogTicker.detach();
-  watchdogTicker.attach_ms(1200, watchdogExpire);
+  watchdogTicker.attach_ms(2000, watchdogExpire);
 }
 
 void handleCommand() {
@@ -406,7 +406,7 @@ void activeSwitchHandle(Button2& btn) {
   displayDirty = 1;
 }
 
-void handleRotary() {
+void ICACHE_RAM_ATTR handleRotary() {
   static int16_t lastPos;
   static int16_t d;
   int16_t newPos = rotary.read() >> 2;
@@ -415,7 +415,7 @@ void handleRotary() {
   rotary_loop(d);
 }
 
-void rotary_loop(int16_t delta) {
+void ICACHE_RAM_ATTR rotary_loop(int16_t delta) {
 	//lets see if anything changed
   int8_t dir = (delta>0)? 1 : -1;
 	
