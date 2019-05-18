@@ -1,6 +1,7 @@
+
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
 #include <Ticker.h>
+#include <ESP8266WiFi.h>
 
 #define FASTLED_ALLOW_INTERRUPTS 0
 // #define FASTLED_INTERRUPT_RETRY_COUNT 1
@@ -29,7 +30,7 @@ uint8_t pendingTransmission = 0;
  * Note: the point of setting a specific MAC is so you can replace this Gateway ESP8266 device with a new one
  * and the new gateway will still pick up the remote sensors which are still sending to the old MAC 
  */
-uint8_t mac[] = {0x36, 0x33, 0x33, 0x33, 0x33, 0x33};
+uint8_t mac[] = {0x36,  0x33, 0x33, 0x33, 0x33, 0x33};
 uint8_t remoteMac[] = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 
 void initVariant()
@@ -47,6 +48,8 @@ void initVariant()
 #define MAX_POWER_MA 8000
 #define MIN_SPEED_ALT ((uint16_t)15)
 
+#define THROTTLE_DELAY 10U
+
 #undef max
 #define max(a,b) ((a)>(b)?(a):(b))
 
@@ -58,6 +61,7 @@ void InitESPNow();
 
 void sendStatus();
 void sendCommand(command_type_t command);
+uint8_t volatile Throttle = 0;
 
 void ICACHE_RAM_ATTR flickLED();
 
@@ -68,6 +72,7 @@ void printState(status_t state);
 
 void ICACHE_RAM_ATTR watchdogReset();
 void ICACHE_RAM_ATTR watchdogExpire();
+void commandThrottle();
 
 void drawLEDs();
 void drawNothing();
@@ -151,6 +156,7 @@ uint8_t isConnected = 0;
 
 Ticker ledTicker;
 Ticker watchdogTicker;
+Ticker commandThrottleTicker;
 
 CRGBArray<WSLEDS> leds;
 CRGBPalette16 currentPalette;
@@ -265,7 +271,7 @@ void ICACHE_RAM_ATTR onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
   // The only data we will actually be receiving is a command packet with the remote's status
   // Only act if that's the case
   // Serial.println("Command Received");
-  if (!pendingCommand) {
+  if (!pendingCommand && !Throttle) {
     if (len == sizeof(commandBufferIn)) {
       memcpy(&commandBufferIn, data, sizeof(commandBufferIn));
       pendingCommand = 1;
@@ -273,6 +279,7 @@ void ICACHE_RAM_ATTR onDataRecv(uint8_t *macaddr, uint8_t *data, uint8_t len) {
     digitalWrite(LED_BUILTIN, LOW);
     ledTicker.once_ms(8, flickLED);
     // watchdogReset();
+    commandThrottleTicker.once_ms(THROTTLE_DELAY, commandThrottle);
   }
 }
 
@@ -280,6 +287,8 @@ void ICACHE_RAM_ATTR flickLED() {
   // ledTicker.detach();
   digitalWrite(LED_BUILTIN, HIGH);
 }
+
+void commandThrottle() { Throttle = 0; }
 
 void sendStatus() {
   // Serial.println("Sending requested Status");

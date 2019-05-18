@@ -71,7 +71,7 @@ uint8_t mac[]       = {0x36, 0x33, 0x33, 0x33, 0x33, 0x35};
 #define BAR_WIDTH (BAR_RIGHT-BAR_LEFT+1)
 #define BAR_HEIGHT  (BAR_BOTTOM-BAR_TOP+1)
 
-#define THROTTLE_DELAY 50U
+#define THROTTLE_DELAY 80U
 
 void printMacAddress(uint8_t* macaddr);
 void ICACHE_RAM_ATTR onDataSent(uint8_t* macaddr, uint8_t status);
@@ -183,7 +183,7 @@ void setup()
   statusLocal.maxbright          = DEFAULT_BRIGHT;
   statusLocal.step               = DEFAULT_STEP;
 
-  pingTicker.attach_ms(1204, sendPing);
+  pingTicker.attach_ms(988, sendPing);
 
   requestStatus();
 }
